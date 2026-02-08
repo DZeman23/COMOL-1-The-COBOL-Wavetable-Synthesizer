@@ -209,4 +209,5 @@ Audacity is a crucial piece of software for this project. COBOL itself does not 
 2. Update the filter from a static to a dynamic time variant style. 
 3. Write a Mainframe compliant version of the code. 
 4. Expand the sample bank with all the waveforms from the original JD800.
-5. Find a way to 'batch' generate 4 or more outputs to better match the 4 voices of the JD800. 
+5. Find a way to 'batch' generate 4 or more outputs to better match the 4 voices of the JD800.
+6. Implement basic JD800 style FX. 
