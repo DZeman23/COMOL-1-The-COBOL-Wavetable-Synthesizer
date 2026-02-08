@@ -133,7 +133,7 @@ Audacity is a crucial piece of software for this project. COBOL itself does not 
 
 5. Compile and run. Open your Output.raw file in audacity. Enjoy
 
-
+6. For a preset sound please follow the instructions in the markup files found in the Presets folder. These are simple to make, although you will have to interact with audacity to get the most out of them. I will aim to include the final sound with processing in an audacity project folder, in case you want to use these samples in music without the hassle of wrangling COMOL-1
 
 # Advanced Tutorial: Making your own waveforms. 
 
