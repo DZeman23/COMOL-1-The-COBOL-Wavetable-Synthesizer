@@ -135,6 +135,25 @@ Audacity is a crucial piece of software for this project. COBOL itself does not 
 
 6. For a preset sound please follow the instructions in the markup files found in the Presets folder. These are simple to make, although you will have to interact with audacity to get the most out of them. I will aim to include the final sound with processing in an audacity project folder, in case you want to use these samples in music without the hassle of wrangling COMOL-1
 
+#### Interpolation Sequencer
+
+The **Interpolation Sequencer** allows you to create custom patterns that cycle through different interpolation methods for each output sample, producing unique audio textures and "grit. for a maximum of 16 characters per string.
+
+**How to use:**
+- When prompted, enter a pattern using digits 1-3 (up to 16 characters)
+- **1** = None (Nearest Neighbor) - Raw, aliased sound
+- **2** = Linear - Smooth interpolation
+- **3** = Sinc - Highest quality, band-limited interpolation
+
+**Examples:**
+- `2222` - Pure linear interpolation (smooth, standard quality)
+- `3331` - Mostly sinc with occasional aliasing for subtle texture
+- `1212` - Alternates between raw and smooth every other sample
+- `321` - Cycles through all three methods (sinc → linear → none, repeat)
+
+
+The pattern repeats throughout playback. Shorter patterns create rhythmic digital artifacts, while longer patterns produce evolving timbral variations. If you leave it blank, it defaults to linear (2).
+
 # Advanced Tutorial: Making your own waveforms. 
 
 ## Creating Custom Waveforms in Audacity
