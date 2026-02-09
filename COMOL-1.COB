@@ -170,7 +170,7 @@
        01  GRIT-CONTROL-VARS   USAGE COMP-3.
            05  GRIT-FACTOR     PIC 9(3) VALUE 1.
            05  OUTPUT-COUNT    PIC 9(9) VALUE 1.
-           05  REMAINDER-VAL   PIC 9(1).
+           05  REMAINDER-VAL   PIC 9(2).
        01  LINEAR-MATH         USAGE COMP-3.
            05  SAMPLE-A        PIC S9(1)V9(17) COMP-3.
            05  SAMPLE-B        PIC S9(1)V9(17) COMP-3.
@@ -184,7 +184,7 @@
 
        01  PATTERN-TABLE-STRUCTURE.
            05  SEQ-STEP OCCURS 16 TIMES.
-               10  INTERP-MODE     PIC 9(1).
+               10  INTERP-MODE     PIC 9(2).
 
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\       SINC INTERPOLATION       /\
@@ -816,3 +816,4 @@
 
        ASCII-VANITY.
            COPY ASCII-ART.
+
