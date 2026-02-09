@@ -7,11 +7,11 @@
       * /\          FILE HANDLES          /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
            SELECT IN-FILE ASSIGN TO
-           "Your/filepath/here.raw"
+           "Your/path/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
            SELECT OUT-FILE ASSIGN TO
-           "Your/filepath/here.raw"
+           "Your/path/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
        DATA DIVISION.
@@ -25,10 +25,10 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\       MENU & USER INPUT        /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  WAVE-SOURCE-CHOICE  PIC 9(1).
-       01  MENU-CHOICE         PIC 9(1).
+       01  WAVE-SOURCE-CHOICE  PIC 9(1) COMP-3.
+       01  MENU-CHOICE         PIC 9(1) COMP-3.
 
-       01  MENU-VARS.
+       01  MENU-VARS           USAGE COMP-3.
            05  USER-OCTAVE     PIC 9(1).
            05  USER-NOTE       PIC 9(2).
 
@@ -44,7 +44,7 @@
                88  DIGITAL-MODE    VALUE 1.
                88  ANALOGUE-MODE   VALUE 2.
 
-       01  FILTER-MATH-VARS.
+       01  FILTER-MATH-VARS    USAGE COMP-3.
            05  LOOKUP-IDX          PIC 9(3).
            05  CURRENT-FREQ-HZ     PIC 9(5).
            05  Q-RESONANCE         PIC 9(2)V9(8).
@@ -58,7 +58,7 @@
            05  FILTERED-SAMPLE     PIC S9(12)V9(8).
 
       * Coefficients
-       01  BIQUAD-COEFFICIENTS.
+       01  BIQUAD-COEFFICIENTS USAGE COMP-3.
            05  A0-COEFF            PIC S9(3)V9(8).
            05  A1-COEFF            PIC S9(3)V9(8).
            05  A2-COEFF            PIC S9(3)V9(8).
@@ -67,7 +67,7 @@
            05  B2-COEFF            PIC S9(3)V9(8).
 
       * Delay Lines (History)
-       01  DELAY-LINES.
+       01  DELAY-LINES         USAGE COMP-3.
            05  X1-INPUT            PIC S9(12)V9(8) VALUE 0.
            05  X2-INPUT            PIC S9(12)V9(8) VALUE 0.
            05  Y1-OUTPUT           PIC S9(12)V9(8) VALUE 0.
@@ -76,13 +76,13 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\   VIRTUAL ANALOGUE VARIABLES   /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  ANALOGUE-PARAMS.
+       01  ANALOGUE-PARAMS     USAGE COMP-3.
            05  BIAS-INTENSITY      PIC 9(3)    VALUE 0.
            05  DRIVE-FACTOR        PIC 9V9(2)  VALUE 1.0.
            05  DRIFT-INTENSITY     PIC 9V9(5)  VALUE 0.00000.
            05  CRUSH-FACTOR        PIC 9(4)    VALUE 1.
 
-       01  ANALOGUE-MATH.
+       01  ANALOGUE-MATH       USAGE COMP-3.
            05  POS-FACTOR          PIC S9(3)V9(8).
            05  NEG-FACTOR          PIC S9(3)V9(8).
            05  UPPER-ADJ           PIC S9(12)V9(8).
@@ -94,12 +94,12 @@
            05  TEMP-X2             PIC 9(12)V9(8).
            05  TEMP-Y              PIC S9(12)V9(8).
 
-       01  DRIFT-ENGINE.
+       01  DRIFT-ENGINE        USAGE COMP-3.
            05  RANDOM-SEED         PIC 9(9)    VALUE 123456789.
            05  RANDOM-RESULT       PIC 9V9(8).
            05  DRIFT-AMOUNT        PIC S9V9(8).
 
-       01  USER-INPUT-HELPERS.
+       01  USER-INPUT-HELPERS  USAGE COMP-3.
            05  USER-DRIVE-IN       PIC 9(3).
            05  USER-DRIFT-IN       PIC 9(3).
            05  USER-CRUSH-IN       PIC 9(4).
@@ -116,7 +116,7 @@
       * /\    RECONSTRUCTION VARIABLES    /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
        01  TWO-BYTE-BUFFER     PIC X(2).
-       01  FILE-READER-VARS.
+       01  FILE-READER-VARS    USAGE COMP-3.
            05  RESULT-WRITER   PIC S9(10).
            05  ENDIAN          PIC S9(10) COMP-5.
            05  NORMALIZED-VAL  PIC S9(9).
@@ -124,11 +124,11 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\        PHYSICS VARIABLES       /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  SAMPLE-RATE         PIC 9(5) VALUE 44100.
+       01  SAMPLE-RATE         PIC 9(5) COMP-3 VALUE 44100.
        01  PI-CONSTANT         PIC 9(1)V9(18) COMP-3
                                VALUE 3.141592653589793238.
 
-       01  PITCH-MATH.
+       01  PITCH-MATH          USAGE COMP-3.
            05  TARGET-FREQUENCY      PIC 9(6)V99.
            05  STEP-SIZE             PIC 9(9)V9999.
            05  MULTIPLICATION-HOLDER PIC 9(12).
@@ -136,7 +136,7 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\      PROGRESS TRACKING         /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  PROGRESS-VARS.
+       01  PROGRESS-VARS       USAGE COMP-3.
            05  GLOBAL-SAMPLE-COUNT PIC 9(9) VALUE 0.
            05  NEXT-UPDATE         PIC 9(9) VALUE 10000.
            05  PROGRESS-THRESHOLD  PIC 9(5) VALUE 10000.
@@ -144,7 +144,7 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\        WAVETABLE MEMORY        /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  WAVE-GENERATOR-CONSTANTS.
+       01  WAVE-GENERATOR-CONSTANTS USAGE COMP-3.
            05  TABLE-SIZE      PIC 9(4) BINARY VALUE 2048.
            05  TABLE-FLOAT     PIC 9(4)V9(1)   VALUE 2048.0.
        01  WAVE-TABLE-STRUCTURE.
@@ -152,14 +152,14 @@
                                INDEXED BY WAVE-IDX.
       * >>>> CRITICAL FIX: Math uses WAVE-SAMPLE, not WAVE-TABLE <<<<
                10  WAVE-SAMPLE PIC S9(1)V9(17) COMP-3.
-       01  SINE-MATH-VARS.
+       01  SINE-MATH-VARS      USAGE COMP-3.
            05  TEMP-ANGLE      PIC S9(3)V9(18) COMP-3.
            05  LOOP-COUNTER    PIC 9(4) BINARY.
 
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\            RESAMPLE            /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  RESAMPLE-POINTERS.
+       01  RESAMPLE-POINTERS   USAGE COMP-3.
            05  READ-POSITION   PIC 9(9)V9999 VALUE 1.
            05  READ-INDEX      PIC 9(7).
            05  FRACTIONAL-PART PIC S9V9(5).
@@ -167,28 +167,38 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\            INTERPOLATION       /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  GRIT-CONTROL-VARS.
+       01  GRIT-CONTROL-VARS   USAGE COMP-3.
            05  GRIT-FACTOR     PIC 9(3) VALUE 1.
            05  OUTPUT-COUNT    PIC 9(9) VALUE 1.
            05  REMAINDER-VAL   PIC 9(1).
-       01  LINEAR-MATH.
+       01  LINEAR-MATH         USAGE COMP-3.
            05  SAMPLE-A        PIC S9(1)V9(17) COMP-3.
            05  SAMPLE-B        PIC S9(1)V9(17) COMP-3.
            05  INTERP-RESULT   PIC S9(2)V9(17) COMP-3.
 
+       01  PATTERN-CONTROL.
+           05  RAW-PATTERN-INPUT   PIC X(16).
+           05  PATTERN-LENGTH      PIC 9(2) VALUE 1.
+           05  PATTERN-IDX         PIC 9(2).
+           05  CURRENT-MODE        PIC 9(1).
+
+       01  PATTERN-TABLE-STRUCTURE.
+           05  SEQ-STEP OCCURS 16 TIMES.
+               10  INTERP-MODE     PIC 9(1).
+
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\       SINC INTERPOLATION       /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  SINC-CONSTANTS.
+       01  SINC-CONSTANTS      USAGE COMP-3.
            05  PI-VAL             PIC 9V9(10) VALUE 3.1415926535.
            05  KERNEL-RADIUS      PIC 9(2)    VALUE 4.
            05  FIXED-POINT-SCALER PIC 9(10)   VALUE 1000000000.
 
-       01  POLYPHASE-CONSTANTS.
+       01  POLYPHASE-CONSTANTS USAGE COMP-3.
            05  PHASE-RESOLUTION   PIC 9(3)    VALUE 900.
            05  PHASE-SCALER       PIC 9(3)    VALUE 900.
 
-       01  SINC-VARS.
+       01  SINC-VARS           USAGE COMP-3.
            05  PHASE-INDEX     PIC 9(3).
            05  KERNEL-INDEX    PIC S9(3).
            05  LOOKUP-INDEX    PIC 9(7).
@@ -203,7 +213,7 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\      ENVELOPE VARIABLES        /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  JD-PARAMS.
+       01  JD-PARAMS           USAGE COMP-3.
            05  L1              PIC 9(3).
            05  L2              PIC 9(3).
            05  L3              PIC 9(3).
@@ -212,7 +222,7 @@
            05  T3              PIC 9(2)V9(2).
            05  T-SUSTAIN       PIC 9(2)V9(2).
            05  T4              PIC 9(2)V9(2).
-       01  STAGE-MATH.
+       01  STAGE-MATH          USAGE COMP-3.
            05  DURATION-SECONDS PIC 9(2)V9(2).
            05  TOTAL-SAMPLES    PIC 9(9).
            05  START-VOLUME     PIC 9(3).
@@ -226,7 +236,7 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\      OUTPUT PCM VARIABLES      /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  PCM-WRITING.
+       01  PCM-WRITING         USAGE COMP-3.
            05  SCALED-SAMPLE   PIC S9(9) BINARY.
            05  LOW-BYTE-VAL    PIC 9(3).
            05  HIGH-BYTE-VAL   PIC 9(3).
@@ -240,6 +250,7 @@
        COPY FREQUENCY-TABLE-WS.
        COPY "D:\COMOL\IMPORTANT\SINE-OMEGA.CPY".
        COPY "D:\COMOL\IMPORTANT\COS-OMEGA.CPY".
+
 
        PROCEDURE DIVISION.
 
@@ -350,7 +361,7 @@
            ACCEPT USER-OCTAVE.
            DISPLAY "Enter Note (0=C, 1=C#, 2=D... 11=B): ".
            ACCEPT USER-NOTE.
-      * [cite_start]Logic from NOTE-SELECTOR.CPY determines which paragraph to run [cite: 216]
+      *    Logic from NOTE-SELECTOR.CPY determines which paragraph to run
            EVALUATE USER-OCTAVE
                WHEN 0 PERFORM SET-OCTAVE-0
                WHEN 1 PERFORM SET-OCTAVE-1
@@ -368,21 +379,34 @@
 
        GET-INTERPOLATION-MODE.
            DISPLAY " ".
-           DISPLAY "--- INTERPOLATION SELECTOR ---".
-           DISPLAY "1. VINTAGE (Linear - Grit 100%)".
-           DISPLAY "2. MODERN  (Linear - Grit 1%)".
-           DISPLAY "3. TAPE    (Linear - 50% Grit)".
-           DISPLAY "4. HI-FI   (Sinc - Pure Clean)".
-           DISPLAY "5. HYBRID  (Sinc - Clean + Grit)".
-           DISPLAY "Choice: ".
-           ACCEPT MENU-CHOICE.
-           EVALUATE MENU-CHOICE
-               WHEN 1 MOVE 1   TO GRIT-FACTOR
-               WHEN 2 MOVE 100 TO GRIT-FACTOR
-               WHEN 3 MOVE 2   TO GRIT-FACTOR
-               WHEN 4 MOVE 100 TO GRIT-FACTOR
-               WHEN 5 MOVE 2   TO GRIT-FACTOR
-           END-EVALUATE.
+           DISPLAY "--- INTERPOLATION SEQUENCER ---".
+           DISPLAY "KEY: 1=None, 2=Linear, 3=Sinc".
+           DISPLAY "Enter Pattern (e.g. 3331, 1212): ".
+           ACCEPT RAW-PATTERN-INPUT.
+
+           PERFORM PARSE-PATTERN.
+
+       PARSE-PATTERN.
+           MOVE 0 TO PATTERN-LENGTH.
+           PERFORM VARYING LOOP-COUNTER FROM 1 BY 1
+             UNTIL LOOP-COUNTER > 16
+
+               IF RAW-PATTERN-INPUT(LOOP-COUNTER:1) = SPACE
+                   EXIT PERFORM
+               END-IF
+
+               ADD 1 TO PATTERN-LENGTH
+               MOVE RAW-PATTERN-INPUT(LOOP-COUNTER:1)
+                 TO INTERP-MODE(LOOP-COUNTER)
+           END-PERFORM.
+
+           IF PATTERN-LENGTH = 0
+               MOVE 1 TO PATTERN-LENGTH
+               MOVE 2 TO INTERP-MODE(1)
+               DISPLAY "Defaulting to Linear (2)."
+           END-IF.
+
+           DISPLAY "Pattern Length: " PATTERN-LENGTH.
 
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\      SECTION: FILTER SETUP     /\
@@ -651,23 +675,31 @@
            COMPUTE FRACTIONAL-PART = READ-POSITION - READ-INDEX.
 
        COMPUTE-RAW-SAMPLE.
-      * This is the "Grit" Logic
+      * 1. Determine position in the sequence (Modulo Math)
+      * We use OUTPUT-COUNT (current sample number)
            COMPUTE REMAINDER-VAL =
-               FUNCTION MOD(OUTPUT-COUNT, GRIT-FACTOR).
-           IF REMAINDER-VAL = 0
-      * Standard Fetch
-      * ERROR FIX: Using WAVE-SAMPLE here
-               MOVE WAVE-SAMPLE(READ-INDEX) TO INTERP-RESULT
-           ELSE
-      * Interpolated Fetch
-               EVALUATE MENU-CHOICE
-                   WHEN 4
-                   WHEN 5
-                       PERFORM CALCULATE-SINC-SAMPLE
-                   WHEN OTHER
-                       PERFORM CALCULATE-LINEAR-SAMPLE
-               END-EVALUATE
-           END-IF.
+               FUNCTION MOD(OUTPUT-COUNT - 1, PATTERN-LENGTH) + 1.
+
+           MOVE INTERP-MODE(REMAINDER-VAL) TO CURRENT-MODE.
+
+      * 2. Execute the chosen mode
+           EVALUATE CURRENT-MODE
+               WHEN 1
+      * NEAREST NEIGHBOR (Raw)
+                   MOVE WAVE-SAMPLE(READ-INDEX) TO INTERP-RESULT
+
+               WHEN 2
+      * LINEAR
+                   PERFORM CALCULATE-LINEAR-SAMPLE
+
+               WHEN 3
+      * SINC
+                   PERFORM CALCULATE-SINC-SAMPLE
+
+               WHEN OTHER
+      * Fail-safe to Linear
+                   PERFORM CALCULATE-LINEAR-SAMPLE
+           END-EVALUATE.
 
        CALCULATE-LINEAR-SAMPLE.
       * ERROR FIX: Using WAVE-SAMPLE here
