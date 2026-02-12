@@ -1793,7 +1793,28 @@ The signal has been:
 The virtual analogue system transforms mathematically perfect digital synthesis into something with the character, imperfection, and musicality of analog hardware—all through carefully designed COBOL fixed-point arithmetic.
 
 
+### Updated Filter Section Addition
 
+Add the following subsection under the main Filter section (e.g., after the description of the biquad filter, virtual analogue processing, or wherever the TVF envelope is introduced in the full documentation):
+
+#### Time-Variant Filter (TVF) Envelope and Depth Control
+
+The synthesizer features a dedicated **Time-Variant Filter (TVF)** envelope that dynamically modulates the filter cutoff frequency in parallel with the amplitude envelope. This second JD-800-style envelope (with identical T1–T4 times and L1–L3 levels) controls the cutoff knob position over time.
+
+**TVF Depth** (`-100` to `+100`) determines the strength and polarity of this modulation:
+
+- **Positive depth** (0 to +100): The TVF envelope **adds** to the static base cutoff knob value.  
+  Example: A fast attack (T1 short, L1 high) opens the filter for a bright initial transient.
+  
+- **Negative depth** (0 to -100): The TVF envelope **subtracts** from the base cutoff (inverted modulation).  
+  Example: Attack closes the filter for a darker, muted onset that later opens.
+
+- **Zero depth**: No modulation—the cutoff remains fixed at the base knob position.
+
+**Mathematical application** (per sample):
+``` mod_amount = current_TVF_envelope_value × (TVF_Depth / 100)
+effective_cutoff = base_cutoff_knob + mod_amount
+effective_cutoff = clamp(effective_cutoff, 0, 100) ```
 
 ## 5. Shapes Amplitude with Time Variant Envelopes
 
@@ -2536,3 +2557,4 @@ The PCM writing system:
 5. **Writes** sequential byte pairs to create raw audio file
 
 This completes the synthesis pipeline—from wavetable oscillation through filtering, analog processing, envelope shaping, and final PCM encoding. The result is a headerless audio file ready for import into any standard audio software for playback, editing, or further processing.
+
