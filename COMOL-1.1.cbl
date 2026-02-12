@@ -1,5 +1,5 @@
        IDENTIFICATION DIVISION.
-       PROGRAM-ID. Comol-1.
+       PROGRAM-ID. Comol-1.1.
        ENVIRONMENT DIVISION.
        INPUT-OUTPUT SECTION.
        FILE-CONTROL.
@@ -229,9 +229,9 @@
 
       * TVF (Filter Envelope) Variables
        01  CUT-PARAMS          USAGE COMP-3.
-           05  CUT-L1              PIC 9(3).
-           05  CUT-L2              PIC 9(3).
-           05  CUT-L3              PIC 9(3).
+           05  CUT-L1              PIC S9(3).
+           05  CUT-L2              PIC S9(3).
+           05  CUT-L3              PIC S9(3).
            05  CUT-T1              PIC 9(2)V9(2).
            05  CUT-T2              PIC 9(2)V9(2).
            05  CUT-T3              PIC 9(2)V9(2).
@@ -557,11 +557,11 @@
            DISPLAY " ".
            DISPLAY "--- CUTOFF ENVELOPE (TIME-VARIANT FILTER) ---".
            DISPLAY "T1 (Attack Time): " ACCEPT CUT-T1.
-           DISPLAY "L1 (Attack Knob 0-100): " ACCEPT CUT-L1.
+           DISPLAY "L1 (Attack Level -50 to 50): " ACCEPT CUT-L1.
            DISPLAY "T2 (Decay1 Time): " ACCEPT CUT-T2.
-           DISPLAY "L2 (Break Knob 0-100): " ACCEPT CUT-L2.
+           DISPLAY "L2 (Break Level -50 to 50): " ACCEPT CUT-L2.
            DISPLAY "T3 (Decay2 Time): " ACCEPT CUT-T3.
-           DISPLAY "L3 (Sustain Knob 0-100): " ACCEPT CUT-L3.
+           DISPLAY "L3 (Sustain Level -50 to 50): " ACCEPT CUT-L3.
            DISPLAY "Sus Time (Duration): " ACCEPT CUT-T-SUSTAIN.
            DISPLAY "T4 (Release Time): " ACCEPT CUT-T4.
            DISPLAY "Envelope Depth (-100 to 100): " ACCEPT TVF-DEPTH.
