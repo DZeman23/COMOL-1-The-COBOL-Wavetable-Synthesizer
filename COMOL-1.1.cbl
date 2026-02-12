@@ -7,11 +7,11 @@
       * /\          FILE HANDLES          /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
            SELECT IN-FILE ASSIGN TO
-           "your/path/here.raw"
+           "your/filepath/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
            SELECT OUT-FILE ASSIGN TO
-           "your/path/here.raw"
+           "your/filepath/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
        DATA DIVISION.
@@ -47,8 +47,8 @@
            88  ANALOGUE-MODE       VALUE 2.
 
        01  FILTER-MATH-VARS        USAGE COMP-3.
-           05  LOOKUP-IDX          PIC 9(3).
-           05  CURRENT-FREQ-HZ     PIC 9(5).
+           05  LOOKUP-IDX          PIC 9(5).
+           05  CURRENT-FREQ-HZ     PIC 9(5)V9(4).
            05  Q-RESONANCE         PIC S9(2)V9(8).
            05  PI-2                PIC 9(1)V9(8) VALUE 6.28318531.
            05  NUMERATOR-VAL       PIC 9(6)V9(8).
@@ -58,6 +58,10 @@
            05  ALPHA-VALUE         PIC S9(2)V9(8).
            05  SAMPLE-WORK-AREA    PIC S9(12)V9(8).
            05  FILTERED-SAMPLE     PIC S9(12)V9(8).
+           05  FREQ-FLOOR          PIC 9(5)V9(4).
+           05  FREQ-CEIL           PIC 9(5)V9(4).
+           05  KNOB-INT            PIC 9(3).
+           05  KNOB-FRAC           PIC 9V9(8).
       * Coefficients
        01  BIQUAD-COEFFICIENTS USAGE COMP-3.
            05  A0-COEFF            PIC S9(3)V9(8).
@@ -682,25 +686,26 @@
                - STAGE-START-CUT-VAL(CURRENT-STAGE-CUT)) * FRAC-POS.
 
        RECALCULATE-COEFFICIENTS.
-      * Apply Weighting: Base + (Envelope * (Depth / 100))
+      * 1. Calculate Envelope Modulation
            COMPUTE DEPTH-CALC = CURRENT-KNOB * (TVF-DEPTH / 100.0).
            COMPUTE DEPTH-CALC = BASE-CUTOFF + DEPTH-CALC.
 
-      * Clamp to valid range (0-100) before Lookup
+      * 2. Clamp Range
            IF DEPTH-CALC > 100 MOVE 100 TO DEPTH-CALC.
            IF DEPTH-CALC < 0   MOVE 0   TO DEPTH-CALC.
 
-           MOVE DEPTH-CALC TO KNOB-POSITION.
+      * 3. Convert Knob (0-100) to Table Index (1-5001)
+           COMPUTE LOOKUP-IDX = (DEPTH-CALC * 50) + 1.
 
-           COMPUTE LOOKUP-IDX = FUNCTION INTEGER(KNOB-POSITION) + 1.
-           IF LOOKUP-IDX < 1 MOVE 1 TO LOOKUP-IDX END-IF.
-           IF LOOKUP-IDX > 101 MOVE 101 TO LOOKUP-IDX END-IF.
+      * 4. DIRECT LOOKUP (Using Original Variable Names)
+           MOVE TBL-SINE-VAL(LOOKUP-IDX) TO FINAL-SINE-VALUE.
+           MOVE TBL-COS-VAL(LOOKUP-IDX)  TO FINAL-COS-VALUE.
 
-           MOVE FREQ-HZ(LOOKUP-IDX) TO CURRENT-FREQ-HZ.
-           PERFORM CALCULATE-ANGULAR-FREQUENCY.
-           PERFORM FIND-SINE-FROM-OMEGA.
-           PERFORM FIND-COS-FROM-OMEGA.
-           PERFORM CALCULATE-ALPHA.
+      * 5. Calculate Resonance
+           COMPUTE ALPHA-VALUE ROUNDED =
+               FINAL-SINE-VALUE / (2 * Q-RESONANCE).
+
+      * 6. Finalize Biquad Coefficients
            PERFORM INIT-COEFFICIENTS.
 
        CALCULATE-ANGULAR-FREQUENCY.
