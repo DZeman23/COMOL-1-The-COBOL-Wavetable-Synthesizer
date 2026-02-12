@@ -7,11 +7,11 @@
       * /\          FILE HANDLES          /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
            SELECT IN-FILE ASSIGN TO
-           "YOUR/FILEPATH/HERE.raw"
+           "You/path/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
            SELECT OUT-FILE ASSIGN TO
-           "YOUR/FILEPATH/HERE.raw"
+           "You/path/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
        DATA DIVISION.
@@ -25,11 +25,11 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\       MENU & USER INPUT        /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  WAVE-SOURCE-CHOICE  PIC 9(1) COMP-3.
-       01  MENU-CHOICE         PIC 9(1) COMP-3.
-       01  MENU-VARS           USAGE COMP-3.
-           05  USER-OCTAVE     PIC 9(1).
-           05  USER-NOTE       PIC 9(2).
+       01  WAVE-SOURCE-CHOICE      PIC 9(1) COMP-3.
+       01  MENU-CHOICE             PIC 9(1) COMP-3.
+       01  MENU-VARS               USAGE COMP-3.
+           05  USER-OCTAVE         PIC 9(1).
+           05  USER-NOTE           PIC 9(2).
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\    FILTER SYSTEM VARIABLES     /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
@@ -38,11 +38,15 @@
            05  ACTIVE-FILTER-TYPE  PIC 9(1).
            05  KNOB-POSITION       PIC 9(3)V9(8).
            05  Q-KNOB-POSITION     PIC 9(3).
+      * Added for Weighting System
+           05  BASE-CUTOFF         PIC 9(3)V9(8).
+           05  TVF-DEPTH           PIC S9(3).
+           05  DEPTH-CALC          PIC S9(5)V9(8).
            05  OPERATION-MODE      PIC 9(1).
-           88  DIGITAL-MODE    VALUE 1.
-           88  ANALOGUE-MODE   VALUE 2.
+           88  DIGITAL-MODE        VALUE 1.
+           88  ANALOGUE-MODE       VALUE 2.
 
-       01  FILTER-MATH-VARS    USAGE COMP-3.
+       01  FILTER-MATH-VARS        USAGE COMP-3.
            05  LOOKUP-IDX          PIC 9(3).
            05  CURRENT-FREQ-HZ     PIC 9(5).
            05  Q-RESONANCE         PIC S9(2)V9(8).
@@ -464,6 +468,9 @@
            END-EVALUATE.
            DISPLAY "Cutoff Knob (0-100): ".
            ACCEPT KNOB-POSITION.
+      * Save the static base value
+           MOVE KNOB-POSITION TO BASE-CUTOFF.
+
            DISPLAY "Resonance Knob (0-100): ".
            ACCEPT Q-KNOB-POSITION.
 
@@ -557,7 +564,7 @@
            DISPLAY "L3 (Sustain Knob 0-100): " ACCEPT CUT-L3.
            DISPLAY "Sus Time (Duration): " ACCEPT CUT-T-SUSTAIN.
            DISPLAY "T4 (Release Time): " ACCEPT CUT-T4.
-
+           DISPLAY "Envelope Depth (-100 to 100): " ACCEPT TVF-DEPTH.
        CALCULATE-CUT-BREAKPOINTS.
       * Stage 1: Attack
            MOVE 1 TO STAGE-START-SAMPLE-CUT(1).
@@ -675,10 +682,20 @@
                - STAGE-START-CUT-VAL(CURRENT-STAGE-CUT)) * FRAC-POS.
 
        RECALCULATE-COEFFICIENTS.
-           MOVE CURRENT-KNOB TO KNOB-POSITION.
+      * Apply Weighting: Base + (Envelope * (Depth / 100))
+           COMPUTE DEPTH-CALC = CURRENT-KNOB * (TVF-DEPTH / 100.0).
+           COMPUTE DEPTH-CALC = BASE-CUTOFF + DEPTH-CALC.
+
+      * Clamp to valid range (0-100) before Lookup
+           IF DEPTH-CALC > 100 MOVE 100 TO DEPTH-CALC.
+           IF DEPTH-CALC < 0   MOVE 0   TO DEPTH-CALC.
+
+           MOVE DEPTH-CALC TO KNOB-POSITION.
+
            COMPUTE LOOKUP-IDX = FUNCTION INTEGER(KNOB-POSITION) + 1.
            IF LOOKUP-IDX < 1 MOVE 1 TO LOOKUP-IDX END-IF.
            IF LOOKUP-IDX > 101 MOVE 101 TO LOOKUP-IDX END-IF.
+
            MOVE FREQ-HZ(LOOKUP-IDX) TO CURRENT-FREQ-HZ.
            PERFORM CALCULATE-ANGULAR-FREQUENCY.
            PERFORM FIND-SINE-FROM-OMEGA.
