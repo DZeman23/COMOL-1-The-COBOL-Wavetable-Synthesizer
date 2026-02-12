@@ -1,11 +1,11 @@
-# Skeleton-Piano Preset Tutorial
+# Skeleton-Piano Preset Tutorial (Updated for v1.1)
 
-This tutorial synthesizes the "Skeleton-Piano" patch using the `Comol-1` engine. This preset combines a hollow body, a metallic attack, and a textured digital buzz.
+This tutorial synthesizes the "Skeleton-Piano" patch using the updated `Comol-1.1` engine. This preset combines a hollow body, a metallic attack, and a textured digital buzz, utilizing the new pattern sequencer and time-variant filter (TVF) features[cite: 81, 110, 160].
 
 ## Prerequisites:
-* Source code file: `JD-ENV.COB`
+* Source code file: `COMOL-1.1.cbl` [cite: 1]
 * COBOL Compiler
-* The three source samples: `EP-TRI-BDY.raw`, `Harsh-Tine.raw`, `DirtyBuzz.raw`
+* The three source samples: `EP-TRI-BDY.raw`, `Harsh-Tine.raw`, `DirtyBuzz.raw` 
 
 ## Phase 1: Synthesizing The Layers
 
@@ -13,87 +13,103 @@ This tutorial synthesizes the "Skeleton-Piano" patch using the `Comol-1` engine.
 
 ### Layer 1: The Foundation (Body)
 
-**Goal:** Create the hollow, warm fundamental.
+**Goal:** Create the hollow, warm fundamental using high-fidelity Sinc interpolation and a gentle filter swell.
 
-1. **Code Setup:** Open `JD-ENV.COB`. Locate the `FILE-CONTROL` section (Lines 6-10).
-
-2. **Edit Path:** Change the `SELECT IN-FILE` path to point to your `EP-TRI-BDY.raw` file.
-   * Example: `SELECT IN-FILE ASSIGN TO "C:\YourFolder\EP-TRI-BDY.raw"`
-
+1. **Code Setup:** Open `COMOL-1.1.cbl`. Locate the `FILE-CONTROL` section.
+2. **Edit Path:** Change the `SELECT IN-FILE` path to point to your `EP-TRI-BDY.raw` file .
 3. **Compile & Run:** Compile the code and run the executable.
-
 4. **Engine Settings:**
-   * **Wave Source:** `2` (File)
-   * **Pitch:** Octave `3`, Note `0` (C)
-   * **Interpolation:** `4` (HI-FI)
-   * **Filter Architecture:** `2` (Virtual Analogue)
+   * **Wave Source:** `2` (Load 2048 Samples) [cite: 145]
+   * **Pitch:** Octave `3`, Note `0` (C) [cite: 154, 155]
+   * **Interpolation Sequencer:** `3333` [cite: 160]
+      * *Note: Selects "Sinc" mode (3) for all steps for maximum clarity.*
+   * **Filter Architecture:** `2` (Virtual Analogue) [cite: 165]
       * Bias: `0`
-      * **Drive:** `2` (Factor 1.0)
-      * **Drift:** `5`
-      * **Crush:** `1`+1
-   * **Filter Type:** `1` (LPF)
-      * Cutoff: `45`
-      * Resonance: `10`
-   * **Envelope:**
+      * Drive: `2` (Resulting Factor 1.0) [cite: 167]
+      * Drift: `5` [cite: 168]
+      * Crush: `1` [cite: 169]
+   * **Filter Type:** `1` (LPF) [cite: 170]
+      * Cutoff Knob: `45` [cite: 172]
+      * Resonance Knob: `10` [cite: 173]
+   * **Amplitude Envelope (JD-800):** [cite: 190]
       * `T1`: 0.05 | `L1`: 90
       * `T2`: 1.50 | `L2`: 70
       * `T3`: 1.00 | `L3`: 60
       * `Sus`: 2.00
       * `T4`: 0.40
+   * **TVF (Cutoff) Envelope:** [cite: 195]
+      * `T1`: 1.00 | `L1`: 55
+      * `T2`: 1.00 | `L2`: 50
+      * `T3`: 1.00 | `L3`: 45
+      * `Sus`: 2.00
+      * `T4`: 0.40
+      * **Depth:** `20` (Gentle opening of the filter) [cite: 199]
 
 5. **Output:** Rename the generated `Output.raw` to `Skeleton_Body.raw`.
 
 ### Layer 2: The Transient (Tine)
 
-**Goal:** A sharp, metallic attack.
+**Goal:** A sharp, metallic attack. We use the "None" interpolation to intentionally introduce aliasing for brightness, and a snappy TVF.
 
-1. **Code Setup:** Open `JD-ENV.COB` and edit the `SELECT IN-FILE` path to point to `Harsh-Tine.raw`.
-
+1. **Code Setup:** Open `COMOL-1.1.cbl` and edit the `SELECT IN-FILE` path to point to `Harsh-Tine.raw`.
 2. **Compile & Run.**
-
 3. **Engine Settings:**
    * **Wave Source:** `2` (File)
    * **Pitch:** Octave `3`, Note `0`
-   * **Interpolation:** `1` (VINTAGE)
-   * **Filter Architecture:** `1` (Pure Digital)
-   * **Filter Type:** `2` (HPF)
-      * Cutoff: `60`
-      * Resonance: `0`
-   * **Envelope:**
+   * **Interpolation Sequencer:** `1111` [cite: 160]
+      * *Note: Selects "None/Nearest" (1) to preserve jagged transients.*
+   * **Filter Architecture:** `1` (Pure Digital) [cite: 165]
+   * **Filter Type:** `2` (HPF) [cite: 170]
+      * Cutoff Knob: `60`
+      * Resonance Knob: `0`
+   * **Amplitude Envelope (JD-800):**
       * `T1`: 0.00 | `L1`: 100
       * `T2`: 0.30 | `L2`: 0
       * `T3`: 0.00 | `L3`: 0
       * `Sus`: 0.00
       * `T4`: 0.10
+   * **TVF (Cutoff) Envelope:**
+      * `T1`: 0.01 | `L1`: 80
+      * `T2`: 0.20 | `L2`: 60
+      * `T3`: 0.00 | `L3`: 60
+      * `Sus`: 0.00
+      * `T4`: 0.10
+      * **Depth:** `30` (Quick snap down of the filter)
 
 4. **Output:** Rename `Output.raw` to `Skeleton_Tine.raw`.
 
 ### Layer 3: The Texture (Buzz)
 
-**Goal:** A background fizz using specific bias and bit-crushing.
+**Goal:** A background fizz using specific bias and bit-crushing. We use the Pattern Sequencer to alternate interpolation modes for a texture that "shimmers."
 
-1. **Code Setup:** Open `JD-ENV.COB` and edit the `SELECT IN-FILE` path to point to `DirtyBuzz.raw`.
-
+1. **Code Setup:** Open `COMOL-1.1.cbl` and edit the `SELECT IN-FILE` path to point to `DirtyBuzz.raw`.
 2. **Compile & Run.**
-
 3. **Engine Settings:**
    * **Wave Source:** `2` (File)
    * **Pitch:** Octave `3`, Note `0`
-   * **Interpolation:** `3` (TAPE)
+   * **Interpolation Sequencer:** `1212` [cite: 160]
+      * *Note: Alternates between None (1) and Linear (2) every sample.*
    * **Filter Architecture:** `2` (Virtual Analogue)
-      * **Bias:** `7` (Low asymmetry)
-      * **Drive:** `8` (Factor 4.0)
-      * **Drift:** `25`
-      * **Crush:** `4` (Digital degradation enabled)+1
+      * **Bias:** `7` (Low asymmetry) [cite: 167]
+      * **Drive:** `8` (Factor 4.0) [cite: 167]
+      * **Drift:** `25` [cite: 168]
+      * **Crush:** `4` (Moderate Bit Reduction) [cite: 169]
    * **Filter Type:** `1` (LPF)
-      * Cutoff: `75`
-      * Resonance: `40`
-   * **Envelope:**
+      * Cutoff Knob: `75`
+      * Resonance Knob: `40`
+   * **Amplitude Envelope (JD-800):**
       * `T1`: 0.10 | `L1`: 40
       * `T2`: 0.50 | `L2`: 20
       * `T3`: 2.00 | `L3`: 10
       * `Sus`: 2.00
       * `T4`: 0.30
+   * **TVF (Cutoff) Envelope:**
+      * `T1`: 0.50 | `L1`: 75
+      * `T2`: 1.00 | `L2`: 60
+      * `T3`: 1.00 | `L3`: 60
+      * `Sus`: 2.00
+      * `T4`: 0.30
+      * **Depth:** `-10` (Slight closing of the filter over time)
 
 4. **Output:** Rename `Output.raw` to `Skeleton_Buzz.raw`.
 
@@ -101,25 +117,12 @@ This tutorial synthesizes the "Skeleton-Piano" patch using the `Comol-1` engine.
 
 Import the three generated files (`Skeleton_Body.raw`, `Skeleton_Tine.raw`, `Skeleton_Buzz.raw`) into your audio editor using these settings:
 
-* **Encoding:** Signed 16-bit PCM
-* **Byte Order:** Little-Endian (Low Byte first)
+* **Encoding:** Signed 16-bit PCM [cite: 126]
+* **Byte Order:** Little-Endian (Low Byte first) [cite: 127, 262]
 * **Channels:** Mono
-* **Sample Rate:** 44100 Hz
+* **Sample Rate:** 44100 Hz [cite: 60]
 
 **Volume Levels:**
 * **Body** (`Skeleton_Body`): -3.0 dB (Primary Source)
 * **Tine** (`Skeleton_Tine`): -6.0 dB (Attack Transient)
 * **Buzz** (`Skeleton_Buzz`): -12.0 dB (Texture/Noise Floor)
-
-## Phase 3: Post-Processing (OPTIONAL)
-
-The following steps are enhancements and are not required for the base sound.
-
-### EQ Strategy
-* **Body:** Cut Highs (>2.5kHz) to reduce digital aliasing overlap.
-* **Tine:** Cut Lows (<400Hz) to isolate the metallic impact.
-* **Buzz:** Band-pass (1kHz Center) to focus the crush artifacts in the midrange.
-
-### Bus Processing
-* **Compression:** Slow attack (30ms) to preserve the Tine snap.
-* **Spatial:** Add the "Ambient" reverb from the default Audacity FX to get an almost DX7 like sound.
