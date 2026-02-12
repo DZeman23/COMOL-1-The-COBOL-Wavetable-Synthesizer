@@ -40,7 +40,7 @@ in the selection and editing of waveforms.
 
 2. Applies pitch shifting via variable-speed playback
 
-3. Processes audio through digital biquad filters
+3. Processes audio through Time Variant JD800 style digital biquad filters
 
 4. Simulates analog characteristics (warmth, drift, saturation, bit reduction)
 
