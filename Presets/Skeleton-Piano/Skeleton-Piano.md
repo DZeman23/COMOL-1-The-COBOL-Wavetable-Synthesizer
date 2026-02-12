@@ -1,9 +1,9 @@
 # Skeleton-Piano Preset Tutorial (Updated for v1.1)
 
-This tutorial synthesizes the "Skeleton-Piano" patch using the updated `Comol-1.1` engine. This preset combines a hollow body, a metallic attack, and a textured digital buzz, utilizing the new pattern sequencer and time-variant filter (TVF) features[cite: 81, 110, 160].
+This tutorial synthesizes the "Skeleton-Piano" patch using the updated `Comol-1.1` engine. This preset combines a hollow body, a metallic attack, and a textured digital buzz, utilizing the new pattern sequencer and time-variant filter (TVF) features
 
 ## Prerequisites:
-* Source code file: `COMOL-1.1.cbl` [cite: 1]
+* Source code file: `COMOL-1.1.cbl` 
 * COBOL Compiler
 * The three source samples: `EP-TRI-BDY.raw`, `Harsh-Tine.raw`, `DirtyBuzz.raw` 
 
@@ -19,31 +19,31 @@ This tutorial synthesizes the "Skeleton-Piano" patch using the updated `Comol-1.
 2. **Edit Path:** Change the `SELECT IN-FILE` path to point to your `EP-TRI-BDY.raw` file .
 3. **Compile & Run:** Compile the code and run the executable.
 4. **Engine Settings:**
-   * **Wave Source:** `2` (Load 2048 Samples) [cite: 145]
-   * **Pitch:** Octave `3`, Note `0` (C) [cite: 154, 155]
-   * **Interpolation Sequencer:** `3333` [cite: 160]
+   * **Wave Source:** `2` (Load 2048 Samples)
+   * **Pitch:** Octave `3`, Note `0` (C)
+   * **Interpolation Sequencer:** `3333` 
       * *Note: Selects "Sinc" mode (3) for all steps for maximum clarity.*
-   * **Filter Architecture:** `2` (Virtual Analogue) [cite: 165]
+   * **Filter Architecture:** `2` (Virtual Analogue) 
       * Bias: `0`
-      * Drive: `2` (Resulting Factor 1.0) [cite: 167]
-      * Drift: `5` [cite: 168]
-      * Crush: `1` [cite: 169]
-   * **Filter Type:** `1` (LPF) [cite: 170]
-      * Cutoff Knob: `45` [cite: 172]
-      * Resonance Knob: `10` [cite: 173]
-   * **Amplitude Envelope (JD-800):** [cite: 190]
+      * Drive: `2` (Resulting Factor 1.0) 
+      * Drift: `5` 
+      * Crush: `1` 
+   * **Filter Type:** `1` (LPF) 
+      * Cutoff Knob: `45` 
+      * Resonance Knob: `10` 
+   * **Amplitude Envelope (JD-800):** 
       * `T1`: 0.05 | `L1`: 90
       * `T2`: 1.50 | `L2`: 70
       * `T3`: 1.00 | `L3`: 60
       * `Sus`: 2.00
       * `T4`: 0.40
-   * **TVF (Cutoff) Envelope:** [cite: 195]
+   * **TVF (Cutoff) Envelope:** 
       * `T1`: 1.00 | `L1`: 55
       * `T2`: 1.00 | `L2`: 50
       * `T3`: 1.00 | `L3`: 45
       * `Sus`: 2.00
       * `T4`: 0.40
-      * **Depth:** `20` (Gentle opening of the filter) [cite: 199]
+      * **Depth:** `20` (Gentle opening of the filter) 
 
 5. **Output:** Rename the generated `Output.raw` to `Skeleton_Body.raw`.
 
@@ -56,10 +56,10 @@ This tutorial synthesizes the "Skeleton-Piano" patch using the updated `Comol-1.
 3. **Engine Settings:**
    * **Wave Source:** `2` (File)
    * **Pitch:** Octave `3`, Note `0`
-   * **Interpolation Sequencer:** `1111` [cite: 160]
+   * **Interpolation Sequencer:** `1111` 
       * *Note: Selects "None/Nearest" (1) to preserve jagged transients.*
-   * **Filter Architecture:** `1` (Pure Digital) [cite: 165]
-   * **Filter Type:** `2` (HPF) [cite: 170]
+   * **Filter Architecture:** `1` (Pure Digital) 
+   * **Filter Type:** `2` (HPF) 
       * Cutoff Knob: `60`
       * Resonance Knob: `0`
    * **Amplitude Envelope (JD-800):**
@@ -87,13 +87,13 @@ This tutorial synthesizes the "Skeleton-Piano" patch using the updated `Comol-1.
 3. **Engine Settings:**
    * **Wave Source:** `2` (File)
    * **Pitch:** Octave `3`, Note `0`
-   * **Interpolation Sequencer:** `1212` [cite: 160]
+   * **Interpolation Sequencer:** `1212` 
       * *Note: Alternates between None (1) and Linear (2) every sample.*
    * **Filter Architecture:** `2` (Virtual Analogue)
-      * **Bias:** `7` (Low asymmetry) [cite: 167]
-      * **Drive:** `8` (Factor 4.0) [cite: 167]
-      * **Drift:** `25` [cite: 168]
-      * **Crush:** `4` (Moderate Bit Reduction) [cite: 169]
+      * **Bias:** `7` (Low asymmetry) 
+      * **Drive:** `8` (Factor 4.0) 
+      * **Drift:** `25` 
+      * **Crush:** `4` (Moderate Bit Reduction) 
    * **Filter Type:** `1` (LPF)
       * Cutoff Knob: `75`
       * Resonance Knob: `40`
@@ -117,12 +117,13 @@ This tutorial synthesizes the "Skeleton-Piano" patch using the updated `Comol-1.
 
 Import the three generated files (`Skeleton_Body.raw`, `Skeleton_Tine.raw`, `Skeleton_Buzz.raw`) into your audio editor using these settings:
 
-* **Encoding:** Signed 16-bit PCM [cite: 126]
-* **Byte Order:** Little-Endian (Low Byte first) [cite: 127, 262]
+* **Encoding:** Signed 16-bit PCM 
+* **Byte Order:** Little-Endian (Low Byte first) 
 * **Channels:** Mono
-* **Sample Rate:** 44100 Hz [cite: 60]
+* **Sample Rate:** 44100 Hz 
 
 **Volume Levels:**
 * **Body** (`Skeleton_Body`): -3.0 dB (Primary Source)
 * **Tine** (`Skeleton_Tine`): -6.0 dB (Attack Transient)
 * **Buzz** (`Skeleton_Buzz`): -12.0 dB (Texture/Noise Floor)
+
