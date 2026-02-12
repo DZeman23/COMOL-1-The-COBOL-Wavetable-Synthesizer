@@ -1,5 +1,5 @@
        IDENTIFICATION DIVISION.
-       PROGRAM-ID. Comol-1.1.
+       PROGRAM-ID. Comol-1.
        ENVIRONMENT DIVISION.
        INPUT-OUTPUT SECTION.
        FILE-CONTROL.
@@ -7,11 +7,11 @@
       * /\          FILE HANDLES          /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
            SELECT IN-FILE ASSIGN TO
-           "You/path/here.raw"
+           "your/path/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
            SELECT OUT-FILE ASSIGN TO
-           "You/path/here.raw"
+           "your/path/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
        DATA DIVISION.
@@ -931,4 +931,3 @@
 
        ASCII-VANITY.
            COPY ASCII-ART.
-
