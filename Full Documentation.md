@@ -798,9 +798,9 @@ This is **far below human pitch perception** (typically ~0.5% or ~10 cents), ens
 
 
 
-## 3. Processes Audio Through Digital Biquad Filters
+## 3. Processes Audio Through a Time-Variant Digital Biquad Filter
 
-After pitch shifting, each sample passes through a digital biquad filter—a second-order IIR (Infinite Impulse Response) filter capable of implementing lowpass, highpass, and bandpass responses with resonance control.
+After pitch shifting, each sample passes through a digital biquad filter — a second-order IIR (Infinite Impulse Response) filter capable of implementing lowpass, highpass, and bandpass responses with resonance control. What makes this filter distinctive is that its cutoff frequency is **not static** — it is driven by a dedicated envelope, sweeping the cutoff automatically over the duration of the note.
 
 ### Filter Architecture Selection
 
@@ -815,7 +815,7 @@ GET-FILTER-SETTINGS.
     ACCEPT OPERATION-MODE.
 ```
 
-Then selects filter type and parameters:
+Then selects filter type and static parameters:
 
 ```cobol
     DISPLAY " ".
@@ -828,7 +828,7 @@ Then selects filter type and parameters:
         WHEN "3" MOVE 3 TO ACTIVE-FILTER-TYPE
         WHEN OTHER MOVE 1 TO ACTIVE-FILTER-TYPE
     END-EVALUATE.
-    
+
     DISPLAY "Cutoff Knob (0-100): ".
     ACCEPT KNOB-POSITION.
     DISPLAY "Resonance Knob (0-100): ".
@@ -840,13 +840,15 @@ Then selects filter type and parameters:
 - **HPF (Highpass)**: Passes frequencies above cutoff, attenuates below
 - **BPF (Bandpass)**: Passes frequencies near cutoff, attenuates both above and below
 
+Note: The static `KNOB-POSITION` entered here is used for the initial coefficient calculation only. Once the envelope loop begins, the cutoff is driven entirely by `CURRENT-KNOB` from the TVF envelope (see Section 3b below).
+
 ### Biquad Filter Data Structures
 
 The filter uses six coefficients and four delay lines (history buffers):
 
 ```cobol
 * Coefficients
-01  BIQUAD-COEFFICIENTS.
+01  BIQUAD-COEFFICIENTS USAGE COMP-3.
     05  A0-COEFF            PIC S9(3)V9(8).
     05  A1-COEFF            PIC S9(3)V9(8).
     05  A2-COEFF            PIC S9(3)V9(8).
@@ -855,7 +857,7 @@ The filter uses six coefficients and four delay lines (history buffers):
     05  B2-COEFF            PIC S9(3)V9(8).
 
 * Delay Lines (History)
-01  DELAY-LINES.
+01  DELAY-LINES USAGE COMP-3.
     05  X1-INPUT            PIC S9(12)V9(8) VALUE 0.
     05  X2-INPUT            PIC S9(12)V9(8) VALUE 0.
     05  Y1-OUTPUT           PIC S9(12)V9(8) VALUE 0.
@@ -866,13 +868,13 @@ The filter uses six coefficients and four delay lines (history buffers):
 - `X1-INPUT`, `X2-INPUT`: Previous two input samples
 - `Y1-OUTPUT`, `Y2-OUTPUT`: Previous two output samples
 
-These store the filter's "memory"—essential for IIR (recursive) filtering.
+These store the filter's "memory" — essential for IIR (recursive) filtering.
 
 ### Coefficient Calculation Process
 
 #### Step 1: Map Knob Position to Frequency
 
-The cutoff knob (0-100) maps to a pre-computed frequency table:
+The cutoff knob value (0–100) maps to a pre-computed logarithmic frequency table:
 
 ```cobol
 CALCULATE-FILTER-COEFFICIENTS.
@@ -882,7 +884,13 @@ CALCULATE-FILTER-COEFFICIENTS.
     DISPLAY "Filter Hz: " CURRENT-FREQ-HZ.
 ```
 
-The `FREQ-HZ` table (loaded from `FREQUENCY-TABLE-WS` copybook) contains logarithmically-spaced frequencies from ~20 Hz to ~20,000 Hz, matching the perceptual response of human hearing.
+The `FREQ-HZ` table (loaded from `FREQUENCY-TABLE-WS` copybook) contains 101 logarithmically-spaced frequencies from 20 Hz to ~20,000 Hz using the formula:
+
+```
+f = 20 × (1000 ^ (x / 100))
+```
+
+This logarithmic spacing matches human pitch perception — equal knob distances produce equal perceived frequency ratios.
 
 #### Step 2: Calculate Q (Resonance)
 
@@ -899,7 +907,7 @@ Q = (0.015 × knob_position) + 0.707
 ```
 
 **Q-factor range:**
-- Knob at 0: Q = 0.707 (Butterworth response, no resonance peak)
+- Knob at 0: Q = 0.707 (Butterworth response, maximally flat, no resonance peak)
 - Knob at 50: Q = 1.457 (moderate resonance)
 - Knob at 100: Q = 2.207 (strong resonance peak)
 
@@ -910,12 +918,12 @@ The constants are defined as:
 78  Q-GRADIENT          VALUE 0.015.
 ```
 
-Higher Q values create a sharper resonant peak at the cutoff frequency, characteristic of analog synthesizer filters.
+Q = 0.707 (1/√2) is the Butterworth value — the lowest Q that produces a flat passband with no peaking. Higher Q values create the characteristic resonant "wah" peak at the cutoff frequency.
 
 #### Step 3: Calculate Angular Frequency (ω)
 
 ```cobol
-* 3. Calculate Omega/Alpha
+* 3. Calculate Omega
     COMPUTE NUMERATOR-VAL = CURRENT-FREQ-HZ / SAMPLE-RATE.
     COMPUTE ANGULAR-FREQUENCY = PI-2 * NUMERATOR-VAL.
 ```
@@ -923,27 +931,22 @@ Higher Q values create a sharper resonant peak at the cutoff frequency, characte
 **The mathematics:**
 
 ```
-normalized_freq = f_cutoff / f_sample
-ω = 2π × normalized_freq
+ω = 2π × (f_cutoff / f_sample)
 ```
 
 **Example:** For 1000 Hz cutoff at 44.1 kHz sample rate:
 
 ```
-normalized_freq = 1000 / 44100 = 0.02268
-ω = 6.28318531 × 0.02268 = 0.14251
+ω = 6.28318531 × (1000 / 44100) = 0.14251 rad/sample
 ```
 
-This converts the cutoff frequency to radians per sample, the unit needed for digital filter design.
+This converts the cutoff frequency to radians per sample — the unit required for digital filter coefficient design.
 
-#### Step 4: Lookup Sin(ω) and Cos(ω)
+#### Step 4: Lookup sin(ω) and cos(ω)
 
-Rather than computing sine and cosine on-the-fly (expensive in COBOL), the program uses pre-computed lookup tables:
+Rather than computing sine and cosine on-the-fly (expensive in COBOL), the program uses pre-computed lookup tables via a linear search:
 
 ```cobol
-    PERFORM FIND-SINE-FROM-OMEGA.
-    PERFORM FIND-COS-FROM-OMEGA.
-
 FIND-SINE-FROM-OMEGA.
     SET IDX-SINE TO 1.
     SEARCH SINE-ENTRY
@@ -959,38 +962,32 @@ FIND-COS-FROM-OMEGA.
     END-SEARCH.
 ```
 
-These tables (from `SINE-OMEGA.CPY` and `COS-OMEGA.CPY`) contain pre-computed values for common angular frequencies.
+The search finds the first table entry whose omega key is >= the calculated angular frequency, providing the closest pre-computed sin/cos values. These tables are loaded from `SINE-OMEGA.CPY` and `COS-OMEGA.CPY`.
 
 #### Step 5: Calculate Alpha
 
 ```cobol
     COMPUTE ALPHA-VALUE ROUNDED =
-     FINAL-SINE-VALUE / (2 * Q-RESONANCE).
+        FINAL-SINE-VALUE / (2 * Q-RESONANCE).
 ```
 
-**The alpha formula:**
+**The alpha formula (standard Audio EQ Cookbook):**
 
 ```
 α = sin(ω) / (2 × Q)
 ```
 
-Alpha is the bandwidth parameter that controls how much the Q-factor affects the filter response.
+Alpha is the bandwidth parameter — it controls the width of the resonant peak relative to Q. A larger alpha (low Q) produces a wider, gentler response; a smaller alpha (high Q) produces a sharper, more resonant peak.
 
 ### Biquad Coefficient Formulas
 
-The standard biquad difference equation is:
+The standard biquad difference equation before normalization is:
 
 ```
 y[n] = (b0×x[n] + b1×x[n-1] + b2×x[n-2] - a1×y[n-1] - a2×y[n-2]) / a0
 ```
 
-Where:
-- `x[n]` = current input sample
-- `y[n]` = current output sample
-- `x[n-1], x[n-2]` = previous input samples
-- `y[n-1], y[n-2]` = previous output samples
-
-#### Initial A-Coefficients (Common to All Filter Types)
+#### A-Coefficients (Common to All Filter Types)
 
 ```cobol
 INIT-COEFFICIENTS.
@@ -1006,13 +1003,14 @@ a1 = -2 × cos(ω)
 a2 = 1 - α
 ```
 
+The A-coefficients are identical for all three filter types — only the B-coefficients change.
+
 #### B-Coefficients (Filter Type Dependent)
 
-**Lowpass Filter (Type 1):**
+**Lowpass Filter (LPF):**
 
 ```cobol
     WHEN 1
-* LPF
         COMPUTE B1-COEFF ROUNDED = 1 - FINAL-COS-VALUE
         COMPUTE B0-COEFF ROUNDED = B1-COEFF / 2
         MOVE B0-COEFF TO B2-COEFF
@@ -1020,23 +1018,17 @@ a2 = 1 - α
 
 **Formulas:**
 ```
-b1 = 1 - cos(ω)
-b0 = b1 / 2
-b2 = b0
-```
-
-Simplified:
-```
 b0 = (1 - cos(ω)) / 2
-b1 = 1 - cos(ω)
+b1 =  1 - cos(ω)
 b2 = (1 - cos(ω)) / 2
 ```
 
-**Highpass Filter (Type 2):**
+The symmetric b-coefficients (b0 = b2) produce a filter centred at DC (0 Hz), rolling off toward the cutoff. The factor of 1/2 normalises the DC gain to unity.
+
+**Highpass Filter (HPF):**
 
 ```cobol
     WHEN 2
-* HPF
         COMPUTE B1-COEFF ROUNDED = -1 * (1 + FINAL-COS-VALUE)
         COMPUTE B0-COEFF ROUNDED = B1-COEFF / -2
         MOVE B0-COEFF TO B2-COEFF
@@ -1044,43 +1036,36 @@ b2 = (1 - cos(ω)) / 2
 
 **Formulas:**
 ```
+b0 =  (1 + cos(ω)) / 2
 b1 = -(1 + cos(ω))
-b0 = -b1 / 2
-b2 = b0
+b2 =  (1 + cos(ω)) / 2
 ```
 
-Simplified:
-```
-b0 = (1 + cos(ω)) / 2
-b1 = -(1 + cos(ω))
-b2 = (1 + cos(ω)) / 2
-```
+The negative b1 mirrors the LPF structure but centred at Nyquist (the highest frequency), rolling off downward toward the cutoff.
 
-**Bandpass Filter (Type 3):**
+**Bandpass Filter (BPF):**
 
 ```cobol
     WHEN 3
-* BPF
-        COMPUTE B0-COEFF ROUNDED = Q-RESONANCE * ALPHA-VALUE
+        COMPUTE B0-COEFF ROUNDED = ALPHA-VALUE
         MOVE 0 TO B1-COEFF
-        COMPUTE B2-COEFF ROUNDED = -1 * B0-COEFF
+        COMPUTE B2-COEFF ROUNDED = -1 * ALPHA-VALUE
 ```
 
 **Formulas:**
 ```
-b0 = Q × α
-b1 = 0
-b2 = -Q × α
+b0 =  α
+b1 =  0
+b2 = -α
 ```
 
-Note: For bandpass, b0 and b2 are opposite signs, and b1 is zero.
+The zero b1 and antisymmetric b0/b2 produce a bandpass centred exactly at the cutoff frequency. The bandwidth of the pass band is determined directly by alpha (and therefore Q).
 
 #### Normalization by A0
 
-To avoid division during sample processing, all coefficients are pre-divided by a0:
+To avoid a division on every single sample, all coefficients are pre-divided by a0 once during setup:
 
 ```cobol
-* Normalize by A0
     COMPUTE B0-COEFF ROUNDED = B0-COEFF / A0-COEFF.
     COMPUTE B1-COEFF ROUNDED = B1-COEFF / A0-COEFF.
     COMPUTE B2-COEFF ROUNDED = B2-COEFF / A0-COEFF.
@@ -1088,35 +1073,35 @@ To avoid division during sample processing, all coefficients are pre-divided by 
     COMPUTE A2-COEFF ROUNDED = A2-COEFF / A0-COEFF.
 ```
 
-This transforms the difference equation to:
+This transforms the difference equation to the simplified form:
 
 ```
 y[n] = b0×x[n] + b1×x[n-1] + b2×x[n-2] - a1×y[n-1] - a2×y[n-2]
 ```
 
-(Note: a0 is now implicitly 1.0 and disappears from the equation)
+A0 is now implicitly 1.0 and disappears from the per-sample calculation entirely.
 
 ### Applying the Filter to Each Sample
 
-During audio generation, each interpolated sample passes through the filter:
+During audio generation, each interpolated sample passes through `APPLY-FILTER`:
 
 ```cobol
 APPLY-FILTER.
-* 1. Convert Float 0.0-1.0 to Signed Int 16-bit Scale for Filter Math
+* 1. Convert Float (-1.0 to 1.0) to Signed 16-bit Integer Scale
     COMPUTE SAMPLE-WORK-AREA = INTERP-RESULT * 32767.
 
-* 2. Biquad Math
+* 2. Biquad Difference Equation
     COMPUTE FILTERED-SAMPLE ROUNDED =
         (SAMPLE-WORK-AREA * B0-COEFF) +
-        (X1-INPUT * B1-COEFF) +
-        (X2-INPUT * B2-COEFF) -
-        (Y1-OUTPUT * A1-COEFF) -
-        (Y2-OUTPUT * A2-COEFF).
+        (X1-INPUT        * B1-COEFF) +
+        (X2-INPUT        * B2-COEFF) -
+        (Y1-OUTPUT       * A1-COEFF) -
+        (Y2-OUTPUT       * A2-COEFF).
 
 * 3. Update Delay Lines
-    MOVE X1-INPUT TO X2-INPUT
+    MOVE X1-INPUT        TO X2-INPUT
     MOVE SAMPLE-WORK-AREA TO X1-INPUT
-    MOVE Y1-OUTPUT TO Y2-OUTPUT
+    MOVE Y1-OUTPUT       TO Y2-OUTPUT
     MOVE FILTERED-SAMPLE TO Y1-OUTPUT.
 
 * 4. Virtual Analogue Mode (covered in Section 4)
@@ -1126,147 +1111,219 @@ APPLY-FILTER.
         PERFORM APPLY-COMP-CASCADE
     END-IF.
 
-* 5. Convert back to Float 0.0-1.0 for Envelope
+* 5. Convert back to Float for Envelope
     COMPUTE INTERP-RESULT = FILTERED-SAMPLE / 32767.0.
 ```
 
-### Step-by-Step Filter Processing
-
-**Step 1: Scale to Integer Range**
-
-```
-sample_work_area = interpolated_sample × 32767
-```
-
-The filter operates on integer-scaled values to avoid floating-point precision loss during fixed-point arithmetic.
-
-**Step 2: Apply Biquad Equation**
-
-```
-y[n] = (x[n] × b0) + (x[n-1] × b1) + (x[n-2] × b2)
-       - (y[n-1] × a1) - (y[n-2] × a2)
-```
-
-**Detailed breakdown:**
+**Step-by-step breakdown:**
 
 | Term | Meaning |
 |------|---------|
-| `SAMPLE-WORK-AREA * B0-COEFF` | Current input scaled by b0 |
-| `X1-INPUT * B1-COEFF` | Previous input scaled by b1 |
-| `X2-INPUT * B2-COEFF` | Two-samples-ago input scaled by b2 |
-| `Y1-OUTPUT * A1-COEFF` | Previous output scaled by a1 (feedback) |
-| `Y2-OUTPUT * A2-COEFF` | Two-samples-ago output scaled by a2 (feedback) |
+| `SAMPLE-WORK-AREA × B0` | Current input (feedforward) |
+| `X1-INPUT × B1` | Input one sample ago (feedforward) |
+| `X2-INPUT × B2` | Input two samples ago (feedforward) |
+| `Y1-OUTPUT × A1` | Output one sample ago (feedback) |
+| `Y2-OUTPUT × A2` | Output two samples ago (feedback) |
 
-The negative signs on the a-coefficients implement **feedback**—this is what makes it an IIR (infinite impulse response) filter with potentially infinite decay.
+The negative signs on the A-terms implement **recursive feedback** — this is what makes it an IIR filter. The filter's response extends infinitely into the past (in theory), giving it sharper frequency selectivity than a FIR filter of the same order.
 
-**Step 3: Update History Buffers**
+After the biquad equation, delay lines are shifted forward:
+
+```
+x[n-1] → x[n-2]    (X1 becomes X2)
+x[n]   → x[n-1]    (current input becomes X1)
+y[n-1] → y[n-2]    (Y1 becomes Y2)
+y[n]   → y[n-1]    (filtered result becomes Y1)
+```
+
+### 3b. The TVF Cutoff Envelope
+
+The filter cutoff is not fixed at the static knob position — it is modulated every sample by the **TVF (Time-Variant Filter) envelope**. This is what creates the classic synthesizer "filter sweep" sound.
+
+#### TVF Envelope Data Structures
+
+The cutoff envelope uses its own independent set of stage breakpoints, separate from the amplitude envelope:
 
 ```cobol
-MOVE X1-INPUT TO X2-INPUT      * Shift x[n-1] → x[n-2]
-MOVE SAMPLE-WORK-AREA TO X1-INPUT  * Store x[n] → x[n-1]
-MOVE Y1-OUTPUT TO Y2-OUTPUT    * Shift y[n-1] → y[n-2]
-MOVE FILTERED-SAMPLE TO Y1-OUTPUT  * Store y[n] → y[n-1]
+01  CUT-PARAMS USAGE COMP-3.
+    05  CUT-L1              PIC 9(3).
+    05  CUT-L2              PIC 9(3).
+    05  CUT-L3              PIC 9(3).
+    05  CUT-T1              PIC 9(2)V9(2).
+    05  CUT-T2              PIC 9(2)V9(2).
+    05  CUT-T3              PIC 9(2)V9(2).
+    05  CUT-T-SUSTAIN       PIC 9(2)V9(2).
+    05  CUT-T4              PIC 9(2)V9(2).
+
+01  CUT-STAGES.
+    05  STAGE-START-SAMPLE-CUT  PIC 9(9) OCCURS 5 TIMES.
+    05  STAGE-END-SAMPLE-CUT    PIC 9(9) OCCURS 5 TIMES.
+    05  STAGE-START-CUT-VAL     PIC S9(3)V9(8) OCCURS 5 TIMES.
+    05  STAGE-END-CUT-VAL       PIC S9(3)V9(8) OCCURS 5 TIMES.
+
+01  TVF-CONTROL-VARS USAGE COMP-3.
+    05  CURRENT-KNOB        PIC S9(3)V9(8) VALUE 0.
+    05  CURRENT-STAGE-CUT   PIC 9(1).
+    05  LOCAL-POS           PIC 9(9).
+    05  STAGE-DURATION      PIC 9(9).
+    05  FRAC-POS            PIC S9V9(8).
 ```
 
-This maintains the two-sample delay line needed for the next iteration.
+Note that all stage value fields are **signed** (`PIC S9...`). This is critical — during a decay stage, the interpolation computes `end_value - start_value` which is negative. Unsigned fields would silently clamp this to zero, killing the filter sweep.
 
-**Step 4: Scale Back to Float**
+#### Breakpoint Pre-Calculation
+
+Before the generation loop starts, `CALCULATE-CUT-BREAKPOINTS` converts the user's time inputs (in seconds) into absolute sample numbers:
+
+```cobol
+CALCULATE-CUT-BREAKPOINTS.
+* Stage 1: Attack
+    MOVE 1 TO STAGE-START-SAMPLE-CUT(1).
+    COMPUTE STAGE-END-SAMPLE-CUT(1)
+        = FUNCTION INTEGER(CUT-T1 * SAMPLE-RATE).
+    MOVE 0     TO STAGE-START-CUT-VAL(1).
+    MOVE CUT-L1 TO STAGE-END-CUT-VAL(1).
+
+* Stage 2: Decay1
+    COMPUTE STAGE-START-SAMPLE-CUT(2) = STAGE-END-SAMPLE-CUT(1) + 1.
+    COMPUTE STAGE-END-SAMPLE-CUT(2)   = STAGE-END-SAMPLE-CUT(1)
+        + FUNCTION INTEGER(CUT-T2 * SAMPLE-RATE).
+    MOVE CUT-L1 TO STAGE-START-CUT-VAL(2).
+    MOVE CUT-L2 TO STAGE-END-CUT-VAL(2).
+
+* ... (Stages 3-5 follow the same pattern) ...
+```
+
+Each stage stores:
+- `STAGE-START-SAMPLE-CUT` / `STAGE-END-SAMPLE-CUT` — the absolute sample range
+- `STAGE-START-CUT-VAL` / `STAGE-END-CUT-VAL` — the knob position (0–100) at each boundary
+
+The five stages map to the JD-800 TVF envelope shape:
 
 ```
-interpolated_result = filtered_sample / 32767.0
+Knob
+ 100 |     * CUT-L1
+     |    / \
+  L2 |   /   *-------* L2
+     |  /     \
+  L3 |          *----------* L3 (sustain holds here)
+     |                      \
+   0 |                       \___* (release → 0)
+     |________________________________> Time
+           T1   T2    T3    Sus   T4
 ```
 
-Returns to normalized float range for envelope processing.
+#### Per-Sample Cutoff Update
+
+Every sample, `UPDATE-CUT-PARAMETER` is called to compute the current knob position via linear interpolation:
+
+```cobol
+UPDATE-CUT-PARAMETER.
+    PERFORM VARYING CURRENT-STAGE-CUT FROM 1 BY 1
+        UNTIL CURRENT-STAGE-CUT > 5
+        IF GLOBAL-SAMPLE-COUNT
+            >= STAGE-START-SAMPLE-CUT(CURRENT-STAGE-CUT)
+        AND GLOBAL-SAMPLE-COUNT
+            <= STAGE-END-SAMPLE-CUT(CURRENT-STAGE-CUT)
+            EXIT PERFORM
+        END-IF
+    END-PERFORM.
+
+    IF CURRENT-STAGE-CUT > 5
+        MOVE STAGE-END-CUT-VAL(5) TO CURRENT-KNOB
+        EXIT PARAGRAPH
+    END-IF.
+
+    COMPUTE LOCAL-POS = GLOBAL-SAMPLE-COUNT
+        - STAGE-START-SAMPLE-CUT(CURRENT-STAGE-CUT) + 1.
+    COMPUTE STAGE-DURATION =
+        STAGE-END-SAMPLE-CUT(CURRENT-STAGE-CUT)
+        - STAGE-START-SAMPLE-CUT(CURRENT-STAGE-CUT) + 1.
+    COMPUTE FRAC-POS = LOCAL-POS / STAGE-DURATION.
+    COMPUTE CURRENT-KNOB =
+        STAGE-START-CUT-VAL(CURRENT-STAGE-CUT) +
+        (STAGE-END-CUT-VAL(CURRENT-STAGE-CUT)
+        - STAGE-START-CUT-VAL(CURRENT-STAGE-CUT)) * FRAC-POS.
+```
+
+**The interpolation formula:**
+
+```
+current_knob = start_val + (end_val - start_val) × (local_pos / stage_duration)
+```
+
+`FRAC-POS` is a value between 0.0 and 1.0 representing how far through the current stage the playhead is. This produces a perfectly smooth linear ramp between every breakpoint. If the cutoff envelope has finished (all 5 stages complete), the last cutoff value is held indefinitely.
+
+#### Full Per-Sample Filter Chain
+
+Each sample in `GENERATE-SAMPLE-BLOCK` executes this sequence:
+
+```cobol
+GENERATE-SAMPLE-BLOCK.
+    PERFORM UPDATE-PROGRESS.
+    PERFORM CALCULATE-INDICES.
+    PERFORM COMPUTE-RAW-SAMPLE.       * 1. Wavetable lookup + interpolation
+    PERFORM UPDATE-CUT-PARAMETER.     * 2. Advance TVF envelope → CURRENT-KNOB
+    PERFORM RECALCULATE-COEFFICIENTS. * 3. Recompute biquad coefficients
+    PERFORM APPLY-FILTER.             * 4. Run biquad, update delay lines
+    PERFORM APPLY-VOLUME-AND-WRITE.   * 5. Apply amplitude envelope, write PCM
+    PERFORM ADVANCE-POINTERS.         * 6. Advance wavetable read position
+```
+
+`RECALCULATE-COEFFICIENTS` takes `CURRENT-KNOB`, looks up the frequency, recomputes omega, looks up sin/cos, computes alpha, and regenerates all six normalised coefficients — every single sample. This is the most computationally expensive part of the synthesis loop but is what enables the smooth, continuous filter sweep.
 
 ### Why Biquad Filters?
 
-**Efficiency:** Second-order filters provide good frequency response with minimal computation—just 5 multiplies and 4 adds per sample.
+**Efficiency:** Second-order filters provide good frequency response with minimal computation — just 5 multiplies and 4 adds per sample.
 
-**Versatility:** The same structure implements LP, HP, and BP filters by simply changing coefficients.
+**Versatility:** The same structure implements LPF, HPF, and BPF by simply changing the B-coefficients.
 
-**Resonance control:** The Q parameter creates the characteristic "resonant peak" essential for synthesizer filters.
+**Resonance control:** The Q parameter creates the characteristic resonant peak essential for synthesizer filters.
 
-**Stability:** When properly designed (Q not too high), biquad filters are numerically stable and won't blow up or oscillate uncontrollably.
+**Stability:** When Q is within reasonable bounds, biquad filters are numerically stable and will not self-oscillate.
 
-**Analog modeling:** Biquad topology closely matches the transfer function of analog state-variable and Sallen-Key filters used in classic synthesizers.
+**Analog modeling:** The biquad topology closely matches the transfer function of analog state-variable and Sallen-Key filters used in classic synthesizers.
 
 ### Frequency Response Characteristics
 
 **Lowpass (LPF):**
-- Passes low frequencies unchanged
-- Rolls off at -12 dB/octave above cutoff
-- Resonance creates peak at cutoff frequency
-- Use case: Remove high-frequency aliasing, create mellow tones
+- Passes low frequencies unchanged, rolls off at -12 dB/octave above cutoff
+- Resonance creates a peak at the cutoff frequency
+- Typical use: Remove high-frequency content, create mellow or warm tones, classic "filter opening" sweeps
 
 **Highpass (HPF):**
-- Passes high frequencies unchanged
-- Rolls off at -12 dB/octave below cutoff
-- Resonance creates peak at cutoff frequency
-- Use case: Remove DC offset, create bright/thin tones
+- Passes high frequencies unchanged, rolls off at -12 dB/octave below cutoff
+- Resonance creates a peak at the cutoff frequency
+- Typical use: Remove low-frequency rumble, create thin or bright tones
 
 **Bandpass (BPF):**
-- Passes frequencies near cutoff
-- Rolls off on both sides
-- Narrower bandwidth with higher Q
-- Use case: Vocal formants, "telephone" effect, resonant sweeps
+- Passes a band of frequencies centred at the cutoff, attenuates both above and below
+- Higher Q narrows the passband
+- Typical use: Vocal formant effects, "telephone" or "radio" filtering, resonant sweeps
 
-### Example: Lowpass Filter at 1000 Hz with Q=1.5
+### Example: Lowpass Filter at 1000 Hz, Q = 1.5
 
-Given:
-- Cutoff = 1000 Hz
-- Sample rate = 44100 Hz
-- Q = 1.5
-
-**Calculations:**
+Given: cutoff = 1000 Hz, sample rate = 44100 Hz, Q = 1.5
 
 ```
 ω = 2π × (1000 / 44100) = 0.14251 rad/sample
 sin(ω) = 0.14195
 cos(ω) = 0.98987
 α = 0.14195 / (2 × 1.5) = 0.04732
+
+a0 = 1.04732,  a1 = -1.97974,  a2 = 0.95268
+b0 = 0.00507,  b1 =  0.01013,  b2 = 0.00507
+
+After normalization:
+b0 = 0.00484,  b1 = 0.00967,  b2 = 0.00484
+a1 = -1.89004, a2 = 0.90962
 ```
 
-**Coefficients:**
-
-```
-a0 = 1 + 0.04732 = 1.04732
-a1 = -2 × 0.98987 = -1.97974
-a2 = 1 - 0.04732 = 0.95268
-
-b1 = 1 - 0.98987 = 0.01013
-b0 = 0.01013 / 2 = 0.00507
-b2 = 0.00507
-```
-
-**After normalization:**
-
-```
-b0 = 0.00507 / 1.04732 = 0.00484
-b1 = 0.01013 / 1.04732 = 0.00967
-b2 = 0.00507 / 1.04732 = 0.00484
-a1 = -1.97974 / 1.04732 = -1.89004
-a2 = 0.95268 / 1.04732 = 0.90962
-```
-
-These coefficients create a lowpass filter that:
-- Passes frequencies below 1000 Hz with minimal attenuation
-- Attenuates frequencies above 1000 Hz at 12 dB/octave
-- Has a resonant peak of ~3 dB at 1000 Hz (due to Q=1.5)
+These coefficients pass frequencies below 1000 Hz with minimal attenuation, roll off at 12 dB/octave above 1000 Hz, and produce a ~3 dB resonant peak at 1000 Hz due to Q = 1.5.
 
 ### Filter Math Precision
 
-The coefficients use 8 decimal places of precision:
-
-```cobol
-05  B0-COEFF            PIC S9(3)V9(8).
-```
-
-This provides:
-- Sufficient accuracy for filter stability
-- Minimal coefficient quantization noise
-- Predictable frequency response across the audio spectrum
-
-The `ROUNDED` clause in coefficient calculations prevents accumulation of rounding errors across the audio generation process.
+All coefficient fields use 8 decimal places (`PIC S9(3)V9(8) COMP-3`), providing sufficient precision for stable filter behaviour across the full audio spectrum. The `ROUNDED` clause on all coefficient computations prevents rounding error accumulation across the millions of recalculations that occur during a note.
 
 
 
