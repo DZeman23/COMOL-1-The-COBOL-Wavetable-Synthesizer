@@ -23,7 +23,7 @@ Inside your project directory (the folder containing your COBOL template file), 
 YourProject/
 ├── bin/                  ← create this
 ├── CML1_Harcode.cbl      ← your COBOL template
-├── UI.py
+├── AutomatedRun.py
 ├── NOTE-SELECTOR.CPY
 ├── NOTE-FREQ-WS.CPY
 ├── ... (other copybooks)
@@ -60,7 +60,7 @@ The original template is never modified — a fresh copy is made for each wavefo
 ## Running the Tool
 
 ```bash
-python UI.py
+python AutomatedRun.py
 ```
 
 ---
@@ -140,7 +140,7 @@ At the bottom of each tab is a **Copy to:** row. Clicking a waveform button copi
 
 ### Compiler Settings
 
-Accessed via the **Compiler Settings** button. These are saved to `config.ini` in the same folder as `UI.py`.
+Accessed via the **Compiler Settings** button. These are saved to `config.ini` in the same folder as `AutomatedRun.py`.
 
 | Setting | Description |
 |---|---|
