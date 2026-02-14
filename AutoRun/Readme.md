@@ -12,6 +12,7 @@ A Python GUI tool for configuring and generating COBOL-based waveform synthesis 
 ---
 
 ## Project Folder Setup
+Remember to use the COBOL file in this folder, if you use the COMOL 1.1 file from the parent directory the python will break. That will be your source file. I also suggest that you create 4 output files for this to make the most of the program. 
 
 Before running the tool, your project folder must be structured correctly.
 
