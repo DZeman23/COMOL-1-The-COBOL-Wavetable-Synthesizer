@@ -1,4 +1,4 @@
-# COBOL Waveform Configurator
+# COBOL Waveform Configurator for GnuCOBOL
 
 A Python GUI tool for configuring and generating COBOL-based waveform synthesis programs. Each waveform is defined by filling in a set of parameters, which the tool injects into a COBOL template — producing ready-to-compile source files that can optionally be compiled and run automatically.
 
