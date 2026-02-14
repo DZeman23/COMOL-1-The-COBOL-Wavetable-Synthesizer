@@ -88,6 +88,9 @@ Furthermore, the envelope design owes its form to the Roland JD800 synth, from w
 
 # Quick-Start Guide:
 
+## Auto-Run with Python
+I suggest that you read this file first and run the program as explained here to understand how the COBOL works. Once you have tried it, you can read the README in the AutoRun folder to automate the synth.
+
 ## Audacity:
 Audacity is a crucial piece of software for this project. COBOL itself does not have the capability to play back .raw (check the External Software section to get the details of what a .raw file is). Because of this built in limitation, you will need external software to play back anything you process or want to process in the synth. 
 
