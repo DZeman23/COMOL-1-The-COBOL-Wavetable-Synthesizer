@@ -7,11 +7,11 @@
       * /\          FILE HANDLES          /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
            SELECT IN-FILE ASSIGN TO
-           "C:\Users\User\Desktop\WaveSources\DirtyBuzz.raw"
+           "Your/filepath/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
            SELECT OUT-FILE ASSIGN TO
-           "C:\Users\User\Desktop\Sine Generator\Output.raw"
+           "Your/filepath/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
        DATA DIVISION.
@@ -925,3 +925,4 @@
 
        ASCII-VANITY.
            COPY ASCII-ART.
+
