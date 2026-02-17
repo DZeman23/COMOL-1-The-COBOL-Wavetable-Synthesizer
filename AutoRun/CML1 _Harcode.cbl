@@ -25,9 +25,10 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\       MENU & USER INPUT        /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  WAVE-SOURCE-CHOICE      PIC 9(1) COMP-3.
+       01  WAVE-SOURCE-CHOICE      PIC 9(1).
        01  MENU-CHOICE             PIC 9(1) COMP-3.
-       01  MENU-VARS               USAGE COMP-3.
+
+       01  MENU-VARS               USAGE IS COMP-3.
            05  USER-OCTAVE         PIC 9(1).
            05  USER-NOTE           PIC 9(2).
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
@@ -46,7 +47,7 @@
            88  DIGITAL-MODE        VALUE 1.
            88  ANALOGUE-MODE       VALUE 2.
 
-       01  FILTER-MATH-VARS        USAGE COMP-3.
+       01  FILTER-MATH-VARS        USAGE IS COMP-5.
            05  LOOKUP-IDX          PIC 9(5).
            05  CURRENT-FREQ-HZ     PIC 9(5)V9(4).
            05  Q-RESONANCE         PIC S9(2)V9(8).
@@ -56,14 +57,14 @@
            05  FINAL-SINE-VALUE    PIC S9(1)V9(8).
            05  FINAL-COS-VALUE     PIC S9(1)V9(8).
            05  ALPHA-VALUE         PIC S9(2)V9(8).
-           05  SAMPLE-WORK-AREA    PIC S9(12)V9(8).
-           05  FILTERED-SAMPLE     PIC S9(12)V9(8).
+           05  SAMPLE-WORK-AREA    PIC S9(5)V9(8).
+           05  FILTERED-SAMPLE     PIC S9(5)V9(8).
            05  FREQ-FLOOR          PIC 9(5)V9(4).
            05  FREQ-CEIL           PIC 9(5)V9(4).
            05  KNOB-INT            PIC 9(3).
            05  KNOB-FRAC           PIC 9V9(8).
       * Coefficients
-       01  BIQUAD-COEFFICIENTS USAGE COMP-3.
+       01  BIQUAD-COEFFICIENTS USAGE COMP-5.
            05  A0-COEFF            PIC S9(3)V9(8).
            05  A1-COEFF            PIC S9(3)V9(8).
            05  A2-COEFF            PIC S9(3)V9(8).
@@ -71,38 +72,44 @@
            05  B1-COEFF            PIC S9(3)V9(8).
            05  B2-COEFF            PIC S9(3)V9(8).
       * Delay Lines (History)
-       01  DELAY-LINES         USAGE COMP-3.
-           05  X1-INPUT            PIC S9(12)V9(8) VALUE 0.
-           05  X2-INPUT            PIC S9(12)V9(8) VALUE 0.
-           05  Y1-OUTPUT           PIC S9(12)V9(8) VALUE 0.
-           05  Y2-OUTPUT           PIC S9(12)V9(8) VALUE 0.
+       01  DELAY-LINES         USAGE COMP-5.
+           05  X1-INPUT            PIC S9(6)V9(8) VALUE 0.
+           05  X2-INPUT            PIC S9(6)V9(8) VALUE 0.
+           05  Y1-OUTPUT           PIC S9(6)V9(8) VALUE 0.
+           05  Y2-OUTPUT           PIC S9(6)V9(8) VALUE 0.
 
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\   VIRTUAL ANALOGUE VARIABLES   /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  ANALOGUE-PARAMS     USAGE COMP-3.
+       01  ANALOGUE-PARAMS     USAGE COMP-5.
            05  BIAS-INTENSITY      PIC 9(3)    VALUE 0.
            05  DRIVE-FACTOR        PIC 9V9(2)  VALUE 1.0.
            05  DRIFT-INTENSITY     PIC 9V9(5)  VALUE 0.00000.
            05  CRUSH-FACTOR        PIC 9(4)    VALUE 1.
 
-       01  ANALOGUE-MATH       USAGE COMP-3.
-           05  POS-FACTOR          PIC S9(3)V9(8).
-           05  NEG-FACTOR          PIC S9(3)V9(8).
-           05  UPPER-ADJ           PIC S9(12)V9(8).
-           05  LOWER-ADJ           PIC S9(12)V9(8).
-           05  TEMP-INT            PIC S9(15).
-           05  TEMP-NORM           PIC S9(12)V9(8).
-           05  TEMP-DRIVE          PIC S9(12)V9(8).
-           05  TEMP-ABS            PIC 9(12)V9(8).
-           05  TEMP-X2             PIC 9(12)V9(8).
-           05  TEMP-Y              PIC S9(12)V9(8).
-       01  DRIFT-ENGINE        USAGE COMP-3.
+       01  ANALOGUE-MATH       USAGE COMP-5.
+      * Drive factors only need small integers but high precision
+           05  POS-FACTOR          PIC S9(3)V9(15).
+           05  NEG-FACTOR          PIC S9(3)V9(15).
+
+      * Clipping thresholds (Values around +/- 32000)
+           05  UPPER-ADJ           PIC S9(5)V9(13).
+           05  LOWER-ADJ           PIC S9(5)V9(13).
+
+      * Intermediate Calculation Variables
+           05  TEMP-INT            PIC S9(18).
+           05  TEMP-NORM           PIC S9(3)V9(15).
+           05  TEMP-DRIVE          PIC S9(5)V9(13).
+           05  TEMP-ABS            PIC 9(5)V9(13).
+           05  TEMP-X2             PIC 9(5)V9(13).
+           05  TEMP-Y              PIC S9(5)V9(13).
+
+       01  DRIFT-ENGINE        USAGE COMP-5.
            05  RANDOM-SEED         PIC 9(9)    VALUE 123456789.
            05  RANDOM-RESULT       PIC 9V9(8).
            05  DRIFT-AMOUNT        PIC S9V9(8).
 
-       01  USER-INPUT-HELPERS  USAGE COMP-3.
+       01  USER-INPUT-HELPERS  USAGE COMP-5.
            05  USER-DRIVE-IN       PIC 9(3).
            05  USER-DRIFT-IN       PIC 9(3).
            05  USER-CRUSH-IN       PIC 9(4).
@@ -117,7 +124,8 @@
       * /\    RECONSTRUCTION VARIABLES    /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
        01  TWO-BYTE-BUFFER     PIC X(2).
-       01  FILE-READER-VARS    USAGE COMP-3.
+
+       01  FILE-READER-VARS    USAGE COMP-5.
            05  RESULT-WRITER   PIC S9(10).
            05  ENDIAN          PIC S9(10) COMP-5.
            05  NORMALIZED-VAL  PIC S9(9).
@@ -125,10 +133,10 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\        PHYSICS VARIABLES       /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  SAMPLE-RATE         PIC 9(5) COMP-3 VALUE 44100.
+       01  SAMPLE-RATE         PIC 9(5) COMP-5 VALUE 44100.
        01  PI-CONSTANT         PIC 9(1)V9(18) COMP-3
                                VALUE 3.141592653589793238.
-       01  PITCH-MATH          USAGE COMP-3.
+       01  PITCH-MATH          USAGE COMP-5.
            05  TARGET-FREQUENCY      PIC 9(6)V99.
            05  STEP-SIZE             PIC 9(9)V9999.
            05  MULTIPLICATION-HOLDER PIC 9(12).
@@ -136,7 +144,7 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\      PROGRESS TRACKING         /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  PROGRESS-VARS       USAGE COMP-3.
+       01  PROGRESS-VARS       USAGE COMP-5.
            05  GLOBAL-SAMPLE-COUNT PIC 9(9) VALUE 0.
            05  NEXT-UPDATE         PIC 9(9) VALUE 10000.
            05  PROGRESS-THRESHOLD  PIC 9(5) VALUE 10000.
@@ -144,21 +152,21 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\        WAVETABLE MEMORY        /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  WAVE-GENERATOR-CONSTANTS USAGE COMP-3.
+       01  WAVE-GENERATOR-CONSTANTS USAGE COMP-5.
            05  TABLE-SIZE      PIC 9(4) BINARY VALUE 2048.
            05  TABLE-FLOAT     PIC 9(4)V9(1)   VALUE 2048.0.
        01  WAVE-TABLE-STRUCTURE.
            05  WAVE-TABLE      OCCURS 2048 TIMES
                                INDEXED BY WAVE-IDX.
       * >>>> CRITICAL FIX: Math uses WAVE-SAMPLE, not WAVE-TABLE <<<<
-               10  WAVE-SAMPLE PIC S9(1)V9(17) COMP-3.
-       01  SINE-MATH-VARS      USAGE COMP-3.
-           05  TEMP-ANGLE      PIC S9(3)V9(18) COMP-3.
+               10  WAVE-SAMPLE PIC S9(1)V9(17) COMP-5.
+       01  SINE-MATH-VARS      USAGE COMP-5.
+           05  TEMP-ANGLE      PIC S9(3)V9(15) COMP-5.
            05  LOOP-COUNTER    PIC 9(4) BINARY.
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\            RESAMPLE            /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  RESAMPLE-POINTERS   USAGE COMP-3.
+       01  RESAMPLE-POINTERS   USAGE COMP-5.
            05  READ-POSITION   PIC 9(9)V9999 VALUE 1.
            05  READ-INDEX      PIC 9(7).
            05  FRACTIONAL-PART PIC S9V9(5).
@@ -166,14 +174,18 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\            INTERPOLATION       /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  GRIT-CONTROL-VARS   USAGE COMP-3.
+       01  GRIT-CONTROL-VARS   USAGE COMP-5.
            05  GRIT-FACTOR     PIC 9(3) VALUE 1.
            05  OUTPUT-COUNT    PIC 9(9) VALUE 1.
            05  REMAINDER-VAL   PIC 9(2).
-       01  LINEAR-MATH         USAGE COMP-3.
-           05  SAMPLE-A        PIC S9(1)V9(17) COMP-3.
-           05  SAMPLE-B        PIC S9(1)V9(17) COMP-3.
-           05  INTERP-RESULT   PIC S9(2)V9(17) COMP-3.
+
+       01  LINEAR-MATH         USAGE COMP-5.
+      * These fit perfectly (1 + 17 = 18 digits)
+           05  SAMPLE-A        PIC S9(1)V9(17).
+           05  SAMPLE-B        PIC S9(1)V9(17).
+
+      * OPTIMIZED: Reduced from S9(2) to S9(1) to fit hardware limit
+           05  INTERP-RESULT   PIC S9(2)V9(16).
 
        01  PATTERN-CONTROL.
            05  RAW-PATTERN-INPUT   PIC X(16).
@@ -187,16 +199,17 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\       SINC INTERPOLATION       /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  SINC-CONSTANTS      USAGE COMP-3.
+       01  SINC-CONSTANTS      USAGE COMP-5.
            05  PI-VAL             PIC 9V9(10) VALUE 3.1415926535.
            05  KERNEL-RADIUS      PIC 9(2)    VALUE 4.
            05  FIXED-POINT-SCALER PIC 9(10)   VALUE 1000000000.
 
-       01  POLYPHASE-CONSTANTS USAGE COMP-3.
+       01  POLYPHASE-CONSTANTS USAGE COMP-5.
            05  PHASE-RESOLUTION   PIC 9(3)    VALUE 900.
            05  PHASE-SCALER       PIC 9(3)    VALUE 900.
 
-       01  SINC-VARS           USAGE COMP-3.
+       01  SINC-VARS           USAGE COMP-5.
+           05  WEIGHT-SUM      PIC S9(5)V9(10).
            05  PHASE-INDEX     PIC 9(3).
            05  KERNEL-INDEX    PIC S9(3).
            05  LOOKUP-INDEX    PIC 9(7).
@@ -211,7 +224,7 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\      ENVELOPE VARIABLES        /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  JD-PARAMS           USAGE COMP-3.
+       01  JD-PARAMS           USAGE COMP-5.
            05  L1              PIC 9(3).
            05  L2              PIC 9(3).
            05  L3              PIC 9(3).
@@ -232,7 +245,7 @@
            05  MAX-AMP          PIC 9(5) VALUE 32767.
 
       * TVF (Filter Envelope) Variables
-       01  CUT-PARAMS          USAGE COMP-3.
+       01  CUT-PARAMS          USAGE COMP-5.
            05  CUT-L1              PIC S9(3).
            05  CUT-L2              PIC S9(3).
            05  CUT-L3              PIC S9(3).
@@ -248,7 +261,7 @@
            05  STAGE-START-CUT-VAL    PIC S9(3)V9(8) OCCURS 5 TIMES.
            05  STAGE-END-CUT-VAL      PIC S9(3)V9(8) OCCURS 5 TIMES.
 
-       01  TVF-CONTROL-VARS    USAGE COMP-3.
+       01  TVF-CONTROL-VARS    USAGE COMP-5.
            05  CURRENT-KNOB        PIC S9(3)V9(8) VALUE 0.
            05  CURRENT-STAGE-CUT   PIC 9(1).
            05  LOCAL-POS           PIC 9(9).
@@ -258,7 +271,7 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\      OUTPUT PCM VARIABLES      /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-       01  PCM-WRITING         USAGE COMP-3.
+       01  PCM-WRITING         USAGE COMP-5.
            05  SCALED-SAMPLE   PIC S9(9) BINARY.
            05  LOW-BYTE-VAL    PIC 9(3).
            05  HIGH-BYTE-VAL   PIC 9(3).
@@ -925,4 +938,5 @@
 
        ASCII-VANITY.
            COPY ASCII-ART.
+
 
