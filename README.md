@@ -49,6 +49,8 @@ in the selection and editing of waveforms.
 6. Uses high-quality interpolation to prevent aliasing
 
 7. Outputs processed audio as raw PCM data
+
+8. Auto run and audio FX modules have been added, their readme documentation is in their subfolders
 	 
 ## Why COBOL?
 
