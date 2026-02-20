@@ -1,0 +1,384 @@
+# COMOLFX — Stereo Nuclear Edition V3
+### Full Technical Documentation
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Signal Chain](#signal-chain)
+3. [Effect 1 — Spectrum (State Variable EQ)](#effect-1--spectrum-state-variable-eq)
+4. [Effect 2 — Saturator](#effect-2--saturator)
+5. [Effect 3 — Phaser](#effect-3--phaser)
+6. [Effect 4 — Chorus (Stereo)](#effect-4--chorus-stereo)
+7. [Effect 5 — Delay (Stereo Ping-Pong)](#effect-5--delay-stereo-ping-pong)
+8. [Effect 6 — Reverb (Parallel Comb Tank)](#effect-6--reverb-parallel-comb-tank)
+9. [DC Blocker (Internal)](#dc-blocker-internal)
+10. [Using FX-RUN.py](#using-fx-runpy)
+
+---
+
+## Overview
+
+COMOLFX is a sample-accurate stereo audio effects processor written in GnuCOBOL. It reads a mono 16-bit signed PCM raw audio file, applies a chain of six DSP effects, and writes two separate output files representing the processed left and right stereo channels. All parameters are hard-coded in the `FX-PARAMS` working-storage section of the COBOL source and can be edited manually or through the companion Python GUI (`FX-RUN.py`).
+
+The program operates at a fixed sample rate of **44,100 Hz**. Internal arithmetic uses fixed-point signed binary fields (`COMP-5`) throughout to keep computation efficient inside the COBOL runtime.
+
+At startup, the program builds two artefacts before processing begins:
+
+- A **16,384-point sine lookup table** used by the Phaser and Chorus LFOs for smooth, interpolated modulation.
+- A **9,000 × 9-tap polyphase Sinc table** used for high-quality interpolation inside the Chorus delay read path.
+
+---
+
+## Signal Chain
+
+Every incoming sample passes through the following stages in strict order:
+
+```
+Input (.raw mono) ──► Spectrum ──► Saturator ──► Phaser ──► Chorus ──► Delay ──► Reverb ──► DC Blocker ──► Output (Left .raw + Right .raw)
+```
+
+The Spectrum, Saturator, and Phaser are pre-effects applied to the single mono signal before it is split into separate left and right paths. Chorus, Delay, and Reverb each operate in true stereo, maintaining independent left and right buffers. The DC Blocker is applied last to both channels to remove any DC offset introduced during processing.
+
+---
+
+## Effect 1 — Spectrum (State Variable EQ)
+
+### How It Works
+
+The Spectrum effect is a **State Variable Filter (SVF)** — one of the most stable biquad-style filter topologies available in DSP. On each sample the SVF simultaneously maintains three outputs: a low-pass, a band-pass, and a high-pass signal. COMOLFX uses only the **band-pass output**, which it blends back into the original signal at a user-controlled gain level. The result is a shelving/peaking EQ that can cut or boost a frequency band centred at `FX-SPEC-FREQ`.
+
+The filter update equations per sample are:
+
+```
+SP-LOW  = (SP-LOW  + (FX-SPEC-FREQ × SP-BAND)) × 0.999
+SP-HIGH = CURRENT-SAMPLE − SP-LOW − (FX-SPEC-Q × SP-BAND)
+SP-BAND = (SP-BAND + (FX-SPEC-FREQ × SP-HIGH)) × 0.999
+
+OUTPUT  = CURRENT-SAMPLE + (SP-BAND × FX-SPEC-GAIN)
+```
+
+The `× 0.999` damping factor on the low and band outputs prevents low-frequency DC build-up. The band-pass signal is added back to the dry signal rather than replacing it, making this an additive EQ that preserves the original character of the audio while boosting or cutting a band.
+
+### Parameters
+
+| Parameter | Variable | Default | Range | Description |
+|-----------|----------|---------|-------|-------------|
+| Centre Frequency | `FX-SPEC-FREQ` | `0.45000` | `0.01 – 0.95` | Normalised cutoff frequency. Values map linearly from near-DC (0.01) to near-Nyquist (0.95). For a 44.1 kHz session, 0.45 sits roughly in the upper midrange (~8–10 kHz region). Lower values target bass and low-mids; higher values target presence and air. Keep below 0.95 to avoid filter instability. |
+| Resonance (Q) | `FX-SPEC-Q` | `0.85000` | `0.1 – 0.99` | Controls the bandwidth of the band-pass filter. Lower values produce a wide, gentle curve. Higher values narrow the band and increase resonant ringing. Values approaching 1.0 create a very sharp, whistling peak and can cause instability — use with care above 0.90. |
+| Band Gain | `FX-SPEC-GAIN` | `0.50` | `−0.50 – 2.00` | Scales the band-pass signal before it is mixed back in. Positive values boost the target band; negative values cut it. At 0.0 the effect is bypassed entirely. Values above 1.0 produce aggressive boosts and may push subsequent stages into saturation. |
+
+---
+
+## Effect 2 — Saturator
+
+### How It Works
+
+The Saturator is a **hard-clipping drive stage** that models the onset of tube or tape saturation. It amplifies the signal by a factor proportional to the drive amount and then clamps the result to a safe ceiling of ±32,000. This creates harmonic distortion and the soft limiting character associated with analogue overdrive without introducing actual waveform instability.
+
+The gain calculation per sample is:
+
+```
+AMPLIFIED = CURRENT-SAMPLE × (1.0 + FX-DRIVE-AMOUNT ÷ 2)
+OUTPUT    = CLAMP(AMPLIFIED, −32000, +32000)
+```
+
+At `FX-DRIVE-AMOUNT = 0.0` the multiplication factor is 1.0, so the signal passes through unchanged. At `FX-DRIVE-AMOUNT = 2.0` the factor becomes 2.0, effectively doubling the signal amplitude before clamping. The harder the signal hits the ceiling, the more overtones are generated, moving from subtle warmth at low settings to aggressive square-wave clipping at the maximum.
+
+The Saturator runs before the Phaser, Chorus, Delay, and Reverb, meaning its harmonic content feeds into all subsequent time-based effects.
+
+### Parameters
+
+| Parameter | Variable | Default | Range | Description |
+|-----------|----------|---------|-------|-------------|
+| Drive Amount | `FX-DRIVE-AMOUNT` | `0.75` | `0.0 – 2.0` | Controls the pre-clipping gain factor. At 0.0 the effect is bypassed. Values of 0.1–0.5 add subtle warmth. Values of 0.5–1.5 produce noticeable harmonic saturation. Values above 1.5 push into hard clipping and heavy distortion. |
+
+---
+
+## Effect 3 — Phaser
+
+### How It Works
+
+The Phaser is a **4-stage all-pass filter** swept by a sinusoidal LFO. Each all-pass stage shifts the phase of the signal without changing its amplitude. When all four shifted versions are combined with the dry signal, the phase cancellations at different frequencies create moving notches in the frequency response — the characteristic "swoosh" of a phaser.
+
+**LFO:** An internal LFO phase accumulator advances by `FX-PHASER-RATE ÷ 44100 × 2π` radians per sample. The sine value is read from the 16,384-point lookup table using linear interpolation between adjacent entries for smoothness. The LFO drives the all-pass coefficient directly.
+
+**All-pass coefficient:** The instantaneous coefficient `AP-COEFF` is computed as:
+
+```
+AP-COEFF = FX-PHASER-MANUAL + (LFO × FX-PHASER-DEPTH × 0.5)
+AP-COEFF = CLAMP(AP-COEFF, −0.95, +0.95)
+```
+
+`FX-PHASER-MANUAL` acts as a static bias for the coefficient, letting you shift the centre of the sweep range up or down. The LFO then modulates around that centre position.
+
+**Feedback:** A smoothed feedback path re-injects the final all-pass output back into the input. The smoothing is a one-pole IIR (70% old value, 30% new) which prevents high-frequency feedback oscillation:
+
+```
+P-FB-SIG = (P-FB-SIG × 0.7) + (PHASER-LPF-MEM × 0.3)
+P-IN     = CURRENT-SAMPLE + (P-FB-SIG × FX-PHASER-FBACK)
+```
+
+**Four all-pass stages** are then applied in series. Each stage is a first-order all-pass cell:
+
+```
+P-OUT = (AP-COEFF × (STATE-Y-OLD − P-IN)) + STATE-X-OLD
+```
+
+**Output mix:** The dry signal and the final all-pass output are blended according to `FX-PHASER-MIX`.
+
+### Parameters
+
+| Parameter | Variable | Default | Range | Description |
+|-----------|----------|---------|-------|-------------|
+| LFO Rate | `FX-PHASER-RATE` | `0.400` | `0.01 – 8.0` | Speed of the phaser sweep in Hz. Slow rates (0.01–0.3 Hz) produce a stately, ambient sweep. Medium rates (0.3–2 Hz) give the classic phaser feel. High rates (above 4 Hz) create a fast, vibrato-like tremolo effect. |
+| Depth | `FX-PHASER-DEPTH` | `0.90` | `0.0 – 1.0` | How wide the LFO sweeps the all-pass coefficient. At 0.0 the coefficient is fixed at the Manual position and there is no movement. At 1.0 the sweep is at full width. |
+| Manual Position | `FX-PHASER-MANUAL` | `0.50` | `0.0 – 1.0` | A static bias added to the LFO output before it drives the all-pass coefficient. This shifts the centre frequency of the sweep. At 0.5 the sweep is centred in the midrange. Higher or lower values bias the sweep toward the treble or bass respectively. |
+| Feedback | `FX-PHASER-FBACK` | `0.75` | `0.0 – 0.95` | Amount of the phased signal fed back into the input. Low values (under 0.3) produce a soft, diffuse phase sweep. Higher values (above 0.6) create resonant, whistling notches. Do not exceed 0.95; the hard-coded clamp prevents coefficient overflow but very high feedback can cause harsh artefacts. |
+| Wet/Dry Mix | `FX-PHASER-MIX` | `0.50` | `0.0 – 1.0` | Blend between the unprocessed (dry) signal and the phased (wet) signal. At 0.0 the phaser is silent. At 1.0 only the phased signal is heard. |
+
+---
+
+## Effect 4 — Chorus (Stereo)
+
+### How It Works
+
+The Chorus creates a **2-voice-per-channel stereo modulated delay**. The core principle is that slightly detuned copies of the signal, when blended with the original, produce the lush, shimmering effect associated with ensembles or choruses of instruments.
+
+**Circular buffer:** Each channel (left and right) has a 4,096-sample circular delay buffer. On every sample tick the current sample is written at the write pointer position, which then advances and wraps.
+
+**LFO:** A single shared LFO accumulator advances by `FX-CHORUS-RATE ÷ 44100 × 2π` radians per sample and drives all four voices. Different phase offsets are applied per voice to spread the modulation and widen the stereo image:
+
+| Channel | Voice | LFO Phase Offset | Base Delay |
+|---------|-------|-----------------|------------|
+| Left | Voice 1 | 0° | 1,323 samples (~30 ms) |
+| Left | Voice 2 | 90° | 1,383 samples (~31.3 ms) |
+| Right | Voice 1 | 90° | 1,323 samples (~30 ms) |
+| Right | Voice 2 | 180° | 1,383 samples (~31.3 ms) |
+
+The 90° offset between the left and right channels means the modulation on the right channel is always in quadrature with the left, guaranteeing a wide, constantly-moving stereo image rather than both channels moving in lockstep.
+
+**Modulated read pointer:** The LFO sine value modulates the read position by `FX-CHORUS-DEPTH` samples around the base delay tap. The instantaneous read position is:
+
+```
+READ-PTR = WRITE-PTR + 4096 − (BASE-DELAY + (LFO × FX-CHORUS-DEPTH))
+```
+
+**Linear interpolation:** Because the modulated read pointer is a fractional value, the output sample is linearly interpolated between the two nearest buffer positions (floor and floor+1), weighted by the fractional part. This eliminates zipper noise and keeps the modulation smooth.
+
+**Post-LPF:** After the two voices for each channel are averaged together, a simple one-pole IIR low-pass filter (~13 kHz cutoff) is applied to suppress any remaining interpolation artefacts:
+
+```
+LPF-MEM = (LPF-MEM × 0.15) + (WET × 0.85)
+```
+
+**Output mix:** Dry and wet are blended per `FX-CHORUS-MIX` for both channels independently.
+
+### Parameters
+
+| Parameter | Variable | Default | Range | Description |
+|-----------|----------|---------|-------|-------------|
+| LFO Rate | `FX-CHORUS-RATE` | `0.85000` | `0.01 – 5.0` | Speed of the modulation LFO in Hz. Lower values (0.01–0.3 Hz) produce slow, submarine-like detuning. Values around 0.5–1.5 Hz give a natural ensemble chorus. Higher values (above 3 Hz) begin to sound like pitch vibrato. |
+| Depth | `FX-CHORUS-DEPTH` | `65.0` | `0 – 300` | Modulation depth in samples. This determines how far the read pointer swings around the base delay tap. At 0 there is no pitch modulation (the effect becomes a fixed comb filter). At 300 the read pointer sweeps ±300 samples (~6.8 ms), producing very deep, dramatic detuning. Values of 30–100 cover most musical use cases. |
+| Wet/Dry Mix | `FX-CHORUS-MIX` | `0.60` | `0.0 – 1.0` | Blend between the dry mono signal and the processed stereo wet signal. At 0.0 no chorus is audible. At 1.0 only the modulated delayed copies are heard. For most uses, values between 0.4 and 0.7 work well. |
+
+---
+
+## Effect 5 — Delay (Stereo Ping-Pong)
+
+### How It Works
+
+The Delay is a **stereo ping-pong delay**. Rather than each channel echoing back into itself, the left channel feeds its echoes into the right output buffer and the right channel feeds into the left output buffer. Each echo alternates sides, creating a rhythmically bouncing stereo repeat pattern.
+
+**Buffer:** Both left and right channels share a 44,100-sample circular delay buffer (exactly 1,000 ms at 44.1 kHz). At initialisation all buffer positions are zeroed.
+
+**Read pointer:** The read position for each echo is calculated by looking back `DELAY-SAMPLES` positions from the current write pointer:
+
+```
+READ-PTR = (WRITE-PTR + BUFFER-SIZE) − DELAY-SAMPLES
+```
+
+Where `DELAY-SAMPLES = (FX-DELAY-MS ÷ 1000) × 44100`.
+
+**Cross-feed write:** The feedback signal written into each buffer is the current dry input sample mixed with the echo read from the *opposite* channel's buffer, scaled by `FX-DELAY-FBACK`:
+
+```
+DELAY-BUF-L[WRITE-PTR] = SAMPLE-L + (WET-R × FX-DELAY-FBACK)
+DELAY-BUF-R[WRITE-PTR] = SAMPLE-R + (WET-L × FX-DELAY-FBACK)
+```
+
+This cross-feed is what creates the ping-pong behaviour. The feedback value is clamped to ±32,000 before writing to prevent buffer overflow over long feedback tails.
+
+**Output mix:** Standard wet/dry blend:
+
+```
+OUTPUT-L = (DRY-L × (1 − FX-DELAY-MIX)) + (WET-L × FX-DELAY-MIX)
+OUTPUT-R = (DRY-R × (1 − FX-DELAY-MIX)) + (WET-R × FX-DELAY-MIX)
+```
+
+### Parameters
+
+| Parameter | Variable | Default | Range | Description |
+|-----------|----------|---------|-------|-------------|
+| Delay Time | `FX-DELAY-MS` | `450.00` | `10 – 1000` | Delay time in milliseconds. The delay buffer is exactly 44,100 samples (1,000 ms); values beyond 1,000 ms will wrap incorrectly. Common musical values: 125 ms (eighth note at 120 BPM), 250 ms (quarter note), 375 ms (dotted eighth), 500 ms (half note). The Python GUI advertises a range up to 3,000 ms but safe values are 10–1,000 ms given the fixed buffer size. |
+| Feedback | `FX-DELAY-FBACK` | `0.65` | `0.0 – 0.95` | Proportion of the echo signal fed back into the buffer on each repeat. At 0.0 there is only a single echo. At 0.95 echoes repeat many times before fading. Values above 0.95 risk runaway accumulation and should be avoided. |
+| Wet/Dry Mix | `FX-DELAY-MIX` | `0.45` | `0.0 – 1.0` | Blend between the original signal and the delayed signal. At 0.0 the delay is silent. At 1.0 only the echoes are heard. |
+
+---
+
+## Effect 6 — Reverb (Parallel Comb Tank)
+
+### How It Works
+
+The Reverb is a **four-tank parallel Schroeder-style comb filter reverb** with stereo cross-feed. It simulates the dense, overlapping reflections of a physical space by running four independent comb filter loops simultaneously and summing their outputs.
+
+**Comb filter tanks:** Each of the four tanks contains a left and a right circular buffer of different lengths. These prime-ish lengths ensure the echoes from each tank hit at different times, building up a dense reverberant tail without obvious periodicity:
+
+| Tank | Buffer Length | Approximate Delay |
+|------|-------------|-------------------|
+| Tank 1 | 1,600 samples | ~36 ms |
+| Tank 2 | 1,800 samples | ~41 ms |
+| Tank 3 | 2,000 samples | ~45 ms |
+| Tank 4 | 2,250 samples | ~51 ms |
+
+**Per-tank processing:** For each tank and each channel, the comb equation applied per sample is:
+
+```
+NEW-VALUE = (DIRECT × 0.31) + (BUFFER[PTR] × FX-REV-DECAY) + (CROSS-CHANNEL × 0.09)
+```
+
+- `0.31` is the direct injection coefficient — how strongly the incoming sample drives each tank.
+- `FX-REV-DECAY` is multiplied by the sample already sitting in that buffer position, acting as the feedback coefficient that determines tail length.
+- `0.09` is the cross-channel injection coefficient — a small amount of the opposite stereo channel leaks into each tank, which creates natural stereo widening and prevents the left and right tails from decaying identically.
+
+The computed value is written back to the buffer and also accumulated into the wet sum for that channel.
+
+**Output mix:** The four wet sums are blended with the dry signal. An additional 0.55 scaling factor is applied to the wet mix to prevent overload when all four tanks are active simultaneously:
+
+```
+OUTPUT-L = (DRY-L × (1 − FX-REV-MIX)) + (WET-L × 0.55 × FX-REV-MIX)
+OUTPUT-R = (DRY-R × (1 − FX-REV-MIX)) + (WET-R × 0.55 × FX-REV-MIX)
+```
+
+### Parameters
+
+| Parameter | Variable | Default | Range | Description |
+|-----------|----------|---------|-------|-------------|
+| Decay | `FX-REV-DECAY` | `0.960` | `0.70 – 0.999` | The feedback coefficient of the comb filters. Lower values (0.70–0.80) produce a short, tight room ambience. Values around 0.90–0.95 give a medium hall. Values close to 0.999 produce an extremely long cathedral or infinite-sounding wash. Values at or above 1.0 will cause the buffers to grow without bound and should not be used. |
+| Wet/Dry Mix | `FX-REV-MIX` | `0.55` | `0.0 – 1.0` | Blend between the dry signal and the reverberant signal. At 0.0 the reverb is inaudible. At 1.0 the output is almost entirely the reverb tail with very little transient. |
+
+---
+
+## DC Blocker (Internal)
+
+The DC Blocker is a **fixed high-pass filter** applied to both channels as the very last processing stage before writing the output files. It has no user-facing parameters.
+
+It uses a standard first-order IIR high-pass topology with a coefficient of **0.995**, which gives a −3 dB cutoff frequency of approximately **5.5 Hz** — well below the threshold of human hearing. Its purpose is to remove any DC offset that may have accumulated through the comb filters or feedback loops during processing, preventing clicks, pops, and DAC clipping when the resulting files are played back.
+
+The equation per channel per sample is:
+
+```
+OUTPUT = SAMPLE − DC-IN-OLD + (0.995 × DC-OUT-OLD)
+```
+
+---
+
+## Using FX-RUN.py
+
+`FX-RUN.py` is a **Tkinter-based graphical front-end** for COMOLFX. Rather than editing the COBOL source by hand, it provides a point-and-click interface for dialling in all FX parameters across up to four independent presets, then automatically patching and compiling a dedicated `.cbl` source file for each one.
+
+### Requirements
+
+- Python 3.x (Tkinter is included in most standard distributions)
+- **GnuCOBOL** (`cobc.exe`) installed and its location configured in the app settings
+
+### Launching the Application
+
+Run the script directly from a terminal or by double-clicking:
+
+```
+python FX-RUN.py
+```
+
+The application window opens at 1060×820 pixels. Your previous session (file paths and preset values) are automatically restored from `config.ini` if it exists in the same directory.
+
+### Step 1 — Select the COBOL Source File
+
+At the top of the window, click **Select File** next to the "COMOL-FX COBOL Source File" label. Navigate to your `COMOLFX.cbl` file and confirm. The selected path will appear in the read-only entry field. This file is used as the template — it is never modified in place.
+
+### Step 2 — Select the Output Directory
+
+Click **Select Folder** next to the "Output Directory" label. All generated `.cbl` files and compiled `.exe` files will be written here. If left blank the output defaults to a `bin/` subdirectory relative to the COBOL source file.
+
+### Step 3 — Configure Presets
+
+The notebook in the centre of the window contains **four tabs (Preset 1 through Preset 4)**. Each tab exposes the full set of FX parameters arranged in three columns. Every parameter entry field displays a tooltip when hovered, showing the parameter name and its recommended range.
+
+Fill in the parameters for each preset you want to generate. The fields that require a file path (input raw file, left output raw file, right output raw file) have **Browse** buttons. Only presets that have both a Left and Right output path specified will be generated.
+
+To replicate a preset's settings across tabs, use the **Copy preset to: Preset X** buttons located below the parameter fields on each tab.
+
+### Step 4 — Configure Compiler Settings
+
+Click **Compiler Settings** to open the settings dialog. The following fields must be set correctly for compilation to work:
+
+| Setting | Description |
+|---------|-------------|
+| Compiler path | Full path to `cobc.exe`, e.g. `C:/GnuCOBOL/bin/cobc.exe` |
+| Path | Additional directories to prepend to the system `PATH` during compilation |
+| Cob config dir | Directory containing GnuCOBOL configuration files (`default.conf` etc.) |
+| Cob copy dir | Directory for COBOL copybooks (can be left blank if unused) |
+| Cob include path | Include path for COBOL headers |
+| Cob lib path | Library path for GnuCOBOL linking (location of `libcob.dll` etc.) |
+| Vcvarsall path | Path to `vcvarsall.bat` if building with MSVC toolchain (usually leave blank for GnuCOBOL) |
+| Output directory | Relative or absolute path where compiled `.exe` files are placed |
+| Copy runtime DLLs | Set to `yes` to automatically copy `libcob.dll`, `gmp.dll`, and `ncurses.dll` into the output directory |
+
+Click **Save Settings** to persist these values to `config.ini`.
+
+### Step 5 — Generate and Run
+
+Ensure the **"Compile & run each generated program in Command Prompt"** checkbox at the top of the window is checked if you want the program to compile and immediately execute each preset. Uncheck it if you only want the patched `.cbl` source files to be written without compiling.
+
+Click **Generate All Presets**. For each preset tab that has both output paths filled in, the script will:
+
+1. Read the original COBOL source into memory.
+2. Locate each `FX-` parameter line by searching for the variable name combined with a `VALUE` keyword, and replace the numeric value with your entry.
+3. Replace the three hard-coded file paths (`SELECT IN-FILE`, `SELECT OUT-FILE-L`, `SELECT OUT-FILE-R`) with the paths you specified for that preset. Backslashes in Windows paths are converted to forward slashes for GnuCOBOL compatibility.
+4. Write the patched source to `FX1.cbl`, `FX2.cbl`, `FX3.cbl`, or `FX4.cbl` in the output directory.
+5. If compilation is enabled, invoke `cobc.exe -x -o FX1.exe FX1.cbl` and launch the resulting executable in a new Command Prompt window.
+
+A summary dialog appears on completion indicating how many presets were successfully generated.
+
+### Session Persistence
+
+All preset values, file paths, and the output directory are saved to `config.ini` automatically when you close the window or click Generate. They are restored the next time the application is launched.
+
+### Tooltip Reference
+
+Hovering over any parameter entry field displays its name and recommended numeric range. These ranges are reproduced here for quick reference:
+
+| Variable | Recommended Range |
+|----------|--------------------|
+| `FX-SPEC-FREQ` | 0.01 – 0.95 |
+| `FX-SPEC-Q` | 0.1 – 0.99 |
+| `FX-SPEC-GAIN` | −0.5 – 2.0 |
+| `FX-DRIVE-AMOUNT` | 0.0 – 2.0 |
+| `FX-PHASER-RATE` | 0.01 – 8.0 |
+| `FX-PHASER-DEPTH` | 0.0 – 1.0 |
+| `FX-PHASER-MANUAL` | 0.0 – 1.0 |
+| `FX-PHASER-FBACK` | 0.0 – 0.95 |
+| `FX-PHASER-MIX` | 0.0 – 1.0 |
+| `FX-CHORUS-RATE` | 0.01 – 5.0 |
+| `FX-CHORUS-DEPTH` | 0 – 300 (samples) |
+| `FX-CHORUS-MIX` | 0.0 – 1.0 |
+| `FX-DELAY-MS` | 10 – 1000 (ms) |
+| `FX-DELAY-FBACK` | 0.0 – 0.95 |
+| `FX-DELAY-MIX` | 0.0 – 1.0 |
+| `FX-REV-DECAY` | 0.70 – 0.999 |
+| `FX-REV-MIX` | 0.0 – 1.0 |
+
+---
+
+*Documentation generated for COMOLFX Stereo Nuclear Edition V3. All effects and parameter ranges are derived directly from the COBOL source code and the FX-RUN.py GUI.*
