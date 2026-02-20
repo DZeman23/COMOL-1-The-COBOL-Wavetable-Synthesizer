@@ -35,7 +35,7 @@ class App:
         self.root.title("COMOL-FX Stereo Processor Configurator")
         self.root.geometry("1060x820")
 
-        self.config_file = 'config.ini'
+        self.config_file = 'config_fx.ini'
         self.settings = self.load_settings()
 
         # COBOL file selection
@@ -198,9 +198,83 @@ class App:
             pady=11
         ).pack(side='left', padx=12)
 
+        tk.Button(
+            btn_frame,
+            text="Save Template",
+            command=self.save_template,
+            font=('Helvetica', 11, 'bold'),
+            padx=22,
+            pady=11
+        ).pack(side='left', padx=12)
+
+        tk.Button(
+            btn_frame,
+            text="Load Template",
+            command=self.load_template,
+            font=('Helvetica', 11, 'bold'),
+            padx=22,
+            pady=11
+        ).pack(side='left', padx=12)
+
         self.load_session()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.root.mainloop()
+
+    def save_template(self):
+        path = filedialog.asksaveasfilename(
+            title="Save FX Preset Template",
+            defaultextension=".ini",
+            filetypes=[("Template files", "*.ini"), ("Text files", "*.txt"), ("All files", "*.*")],
+            parent=self.root
+        )
+        if not path:
+            return
+        config = configparser.ConfigParser()
+        config['Meta'] = {
+            'cobol_path': self.cobol_path_var.get(),
+            'output_dir': self.output_dir_var.get(),
+        }
+        for i in range(4):
+            section = f'Preset_{i+1}'
+            config[section] = {}
+            for var in self.variables:
+                config[section][var] = self.entry_vars[i][var].get()
+        with open(path, 'w') as f:
+            f.write("# COMOL-FX Stereo Processor - Preset Template File\n")
+            f.write("# Edit values below and load back with 'Load Template'.\n")
+            f.write("# Each [Preset_N] section corresponds to one preset tab.\n\n")
+            config.write(f)
+        messagebox.showinfo("Template Saved", f"Template saved to:\n{path}")
+
+    def load_template(self):
+        path = filedialog.askopenfilename(
+            title="Load FX Preset Template",
+            filetypes=[("Template files", "*.ini"), ("Text files", "*.txt"), ("All files", "*.*")],
+            parent=self.root
+        )
+        if not path:
+            return
+        config = configparser.ConfigParser()
+        config.read(path)
+        if 'Meta' in config:
+            cp = config['Meta'].get('cobol_path', '')
+            if cp and os.path.isfile(cp):
+                self.cobol_path_var.set(cp)
+            od = config['Meta'].get('output_dir', '')
+            if od:
+                self.output_dir_var.set(od)
+        loaded = 0
+        for i in range(4):
+            section = f'Preset_{i+1}'
+            if section in config:
+                for var in self.variables:
+                    val = config[section].get(var.lower(), config[section].get(var, ''))
+                    self.entry_vars[i][var].set(val)
+                loaded += 1
+        if loaded:
+            messagebox.showinfo("Template Loaded", f"Loaded {loaded} preset(s) from:\n{path}")
+        else:
+            messagebox.showwarning("Load Failed", "No [Preset_N] sections found in that file.")
 
     def on_close(self):
         self.save_session()
