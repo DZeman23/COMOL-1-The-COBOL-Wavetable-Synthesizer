@@ -12,7 +12,7 @@
        INPUT-OUTPUT SECTION.
        FILE-CONTROL.
 
-           SELECT IN-FILE  ASSIGN TO
+           SELECT IN-FILE ASSIGN TO
            "your/filepath/here.raw"
                ORGANIZATION IS SEQUENTIAL
                ACCESS MODE  IS SEQUENTIAL
@@ -922,3 +922,4 @@
            MOVE FX-SINE-RAW(LFO-NEXT-IDX) TO LFO-VAL-B.
            COMPUTE LFO-SMOOTH =
                LFO-VAL-A + (LFO-FRAC * (LFO-VAL-B - LFO-VAL-A)).
+
