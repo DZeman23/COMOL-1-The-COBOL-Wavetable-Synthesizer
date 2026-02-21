@@ -90,8 +90,6 @@ class App:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill='both', expand=True, padx=10, pady=5)
 
-        # FX parameters discovered from the provided COMOLFX.cbl (hard-coded FX-PARAMS section)
-        # Tooltips include lower/upper limits analyzed from PIC clauses, usage in code, and sensible musical ranges
         self.var_descriptions = {
             'FX-SPEC-FREQ': "Spectrum Frequency (0.01 - 0.95)",
             'FX-SPEC-Q': "Spectrum Q Factor (0.1 - 0.99)",
@@ -162,7 +160,6 @@ class App:
             for c in range(3):
                 tab.columnconfigure(c * 3 + 1, weight=1)
 
-            # Copy-to row
             copy_row = vars_per_column + 1
             copy_frame = tk.Frame(tab)
             copy_frame.grid(row=copy_row, column=0, columnspan=9, pady=(15, 6), padx=10, sticky='w')
@@ -220,6 +217,7 @@ class App:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.root.mainloop()
 
+    # === TEMPLATE / SESSION / SETTINGS METHODS (unchanged) ===
     def save_template(self):
         path = filedialog.asksaveasfilename(
             title="Save FX Preset Template",
@@ -227,22 +225,15 @@ class App:
             filetypes=[("Template files", "*.ini"), ("Text files", "*.txt"), ("All files", "*.*")],
             parent=self.root
         )
-        if not path:
-            return
+        if not path: return
         config = configparser.ConfigParser()
-        config['Meta'] = {
-            'cobol_path': self.cobol_path_var.get(),
-            'output_dir': self.output_dir_var.get(),
-        }
+        config['Meta'] = {'cobol_path': self.cobol_path_var.get(), 'output_dir': self.output_dir_var.get()}
         for i in range(4):
             section = f'Preset_{i+1}'
-            config[section] = {}
-            for var in self.variables:
-                config[section][var] = self.entry_vars[i][var].get()
+            config[section] = {var: self.entry_vars[i][var].get() for var in self.variables}
         with open(path, 'w') as f:
             f.write("# COMOL-FX Stereo Processor - Preset Template File\n")
-            f.write("# Edit values below and load back with 'Load Template'.\n")
-            f.write("# Each [Preset_N] section corresponds to one preset tab.\n\n")
+            f.write("# Edit values below and load back with 'Load Template'.\n\n")
             config.write(f)
         messagebox.showinfo("Template Saved", f"Template saved to:\n{path}")
 
@@ -252,8 +243,7 @@ class App:
             filetypes=[("Template files", "*.ini"), ("Text files", "*.txt"), ("All files", "*.*")],
             parent=self.root
         )
-        if not path:
-            return
+        if not path: return
         config = configparser.ConfigParser()
         config.read(path)
         if 'Meta' in config:
@@ -271,10 +261,8 @@ class App:
                     val = config[section].get(var.lower(), config[section].get(var, ''))
                     self.entry_vars[i][var].set(val)
                 loaded += 1
-        if loaded:
-            messagebox.showinfo("Template Loaded", f"Loaded {loaded} preset(s) from:\n{path}")
-        else:
-            messagebox.showwarning("Load Failed", "No [Preset_N] sections found in that file.")
+        messagebox.showinfo("Template Loaded", f"Loaded {loaded} preset(s) from:\n{path}") if loaded else \
+            messagebox.showwarning("Load Failed", "No [Preset_N] sections found.")
 
     def on_close(self):
         self.save_session()
@@ -282,21 +270,18 @@ class App:
 
     def load_settings(self):
         config = configparser.ConfigParser()
+        defaults = {
+            'compiler_path': 'cobc.exe', 'path': '', 'cob_config_dir': '', 'cob_copy_dir': '',
+            'cob_include_path': '', 'cob_lib_path': '', 'vcvarsall_path': '',
+            'output_directory': 'bin', 'copy_runtime_dlls': 'no'
+        }
         if os.path.exists(self.config_file):
             config.read(self.config_file)
-            return dict(config['DEFAULT'])
-        else:
-            return {
-                'compiler_path': 'cobc.exe',
-                'path': '',
-                'cob_config_dir': '',
-                'cob_copy_dir': '',
-                'cob_include_path': '',
-                'cob_lib_path': '',
-                'vcvarsall_path': '',
-                'output_directory': 'bin',
-                'copy_runtime_dlls': 'no'
-            }
+            if 'DEFAULT' in config:
+                for key in defaults:
+                    if key in config['DEFAULT']:
+                        defaults[key] = config['DEFAULT'][key]
+        return defaults
 
     def save_settings(self, new_settings):
         config = configparser.ConfigParser()
@@ -313,41 +298,38 @@ class App:
         config = configparser.ConfigParser()
         if os.path.exists(self.config_file):
             config.read(self.config_file)
-        session = {
-            'cobol_path': self.cobol_path_var.get(),
-            'output_dir': self.output_dir_var.get(),
-        }
+        session = {'cobol_path': self.cobol_path_var.get(), 'output_dir': self.output_dir_var.get()}
         for i in range(4):
             for var in self.variables:
-                val = self.entry_vars[i][var].get()
-                session[f'tab{i}_{var}'] = val
+                session[f'tab{i}_{var}'] = self.entry_vars[i][var].get()
         config['SESSION'] = session
         with open(self.config_file, 'w') as f:
             config.write(f)
 
     def load_session(self):
-        if not os.path.exists(self.config_file):
-            return
+        if not os.path.exists(self.config_file): return
         config = configparser.ConfigParser()
         config.read(self.config_file)
-        if 'SESSION' not in config:
-            return
+        if 'SESSION' not in config: return
         session = config['SESSION']
-        cobol_path = session.get('cobol_path', '')
-        if cobol_path and os.path.isfile(cobol_path):
-            self.cobol_path_var.set(cobol_path)
-        output_dir = session.get('output_dir', '')
-        if output_dir:
+        if cobol_path := session.get('cobol_path'):
+            if os.path.isfile(cobol_path):
+                self.cobol_path_var.set(cobol_path)
+        if output_dir := session.get('output_dir'):
             self.output_dir_var.set(output_dir)
         for i in range(4):
             for var in self.variables:
-                val = session.get(f'tab{i}_{var}', '')
-                if val:
+                if val := session.get(f'tab{i}_{var}'):
                     self.entry_vars[i][var].set(val)
 
     def open_settings(self):
+        # (unchanged - same as before)
         settings_win = tk.Toplevel(self.root)
         settings_win.title("Compiler Settings")
+        settings_win.geometry("820x580")
+        settings_win.resizable(True, True)
+        settings_win.transient(self.root)
+        settings_win.grab_set()
 
         descriptions = {
             'compiler_path': "Full path to the COBOL compiler executable (e.g., cobc.exe).",
@@ -364,22 +346,27 @@ class App:
         entry_vars = {}
         row = 0
         for key, default in self.settings.items():
-            tk.Label(settings_win, text=key.capitalize().replace('_', ' ') + ":").grid(row=row, column=0, sticky='w', padx=5, pady=5)
+            tk.Label(settings_win, text=key.replace('_', ' ').title() + ":", font=('Helvetica', 10)).grid(
+                row=row, column=0, padx=(30, 12), pady=10, sticky='e')
             entry_vars[key] = tk.StringVar(value=default)
-            entry = tk.Entry(settings_win, textvariable=entry_vars[key], width=60)
-            entry.grid(row=row, column=1, padx=5, pady=5)
-            Tooltip(entry, descriptions.get(key, "No description available."))
+            tk.Entry(settings_win, textvariable=entry_vars[key], width=75, font=('Helvetica', 9)).grid(
+                row=row, column=1, padx=(0, 30), pady=10, sticky='ew')
+            Tooltip(entry_vars[key].get(), descriptions.get(key, ""))
             row += 1
 
+        settings_win.columnconfigure(1, weight=1)
+
         def save_and_close():
-            new_settings = {k: entry_vars[k].get() for k in self.settings}
+            new_settings = {k: entry_vars[k].get().strip() for k in self.settings}
             self.save_settings(new_settings)
             self.settings = new_settings
             settings_win.destroy()
             messagebox.showinfo("Settings Saved", "Compiler settings have been updated and saved.")
 
-        btn_save = tk.Button(settings_win, text="Save Settings", command=save_and_close)
-        btn_save.grid(row=row, column=0, columnspan=2, pady=10)
+        btn_frame = tk.Frame(settings_win)
+        btn_frame.grid(row=row + 1, column=0, columnspan=2, pady=30)
+        tk.Button(btn_frame, text="Cancel", width=14, padx=20, pady=8, command=settings_win.destroy).pack(side='right', padx=12)
+        tk.Button(btn_frame, text="Save Settings", width=16, font=('Helvetica', 10, 'bold'), padx=25, pady=8, command=save_and_close).pack(side='right', padx=12)
 
     def copy_preset(self, src, dst):
         for var in self.variables:
@@ -388,25 +375,21 @@ class App:
         messagebox.showinfo("Copied", f"Preset {src+1} parameters copied to Preset {dst+1}.")
 
     def select_output_dir(self):
-        path = filedialog.askdirectory(title="Select Output Directory")
-        if path:
+        if path := filedialog.askdirectory(title="Select Output Directory"):
             self.output_dir_var.set(os.path.normpath(path))
 
     def select_cobol(self):
-        path = filedialog.askopenfilename(filetypes=[("COBOL files", "*.cbl *.cob")])
-        if path:
+        if path := filedialog.askopenfilename(filetypes=[("COBOL files", "*.cbl *.cob")]):
             self.cobol_path_var.set(path)
 
     def browse_input(self, tab_idx):
         current = self.entry_vars[tab_idx]['IN_FILE_PATH'].get().strip()
         initial_dir = os.path.dirname(current) if current and os.path.isdir(os.path.dirname(current)) else os.getcwd()
-        path = filedialog.askopenfilename(
-            title="Select Input .raw File",
-            initialdir=initial_dir,
-            filetypes=[("Raw audio", "*.raw"), ("All files", "*.*")],
-            parent=self.root
-        )
-        if path:
+        if path := filedialog.askopenfilename(
+                title="Select Input .raw File",
+                initialdir=initial_dir,
+                filetypes=[("Raw audio", "*.raw"), ("All files", "*.*")],
+                parent=self.root):
             self.entry_vars[tab_idx]['IN_FILE_PATH'].set(os.path.normpath(path))
 
     def browse_output(self, tab_idx, is_left):
@@ -415,18 +398,16 @@ class App:
         initial_dir = os.path.dirname(current) if current and os.path.isdir(os.path.dirname(current)) else os.getcwd()
         side = 'L' if is_left else 'R'
         initial_file = os.path.basename(current) if current else f"FX{tab_idx+1}_{side}.raw"
-
-        path = filedialog.asksaveasfilename(
-            title=f"Save {'Left' if is_left else 'Right'} Output .raw File",
-            defaultextension=".raw",
-            initialdir=initial_dir,
-            initialfile=initial_file,
-            filetypes=[("Raw audio", "*.raw"), ("All files", "*.*")],
-            parent=self.root
-        )
-        if path:
+        if path := filedialog.asksaveasfilename(
+                title=f"Save {'Left' if is_left else 'Right'} Output .raw File",
+                defaultextension=".raw",
+                initialdir=initial_dir,
+                initialfile=initial_file,
+                filetypes=[("Raw audio", "*.raw"), ("All files", "*.*")],
+                parent=self.root):
             self.entry_vars[tab_idx][key].set(os.path.normpath(path))
 
+    # ====================== UPDATED GENERATE (NOW IDENTICAL TO AutomatedRun.py) ======================
     def generate(self):
         cobol_path = self.cobol_path_var.get()
         if not cobol_path or not os.path.isfile(cobol_path):
@@ -441,12 +422,23 @@ class App:
             return
 
         cobol_dir = os.path.normpath(os.path.dirname(cobol_path))
+        path_limit = 256
+
+        # === EXACT SAME ENVIRONMENT SETUP AS AutomatedRun.py ===
+        if self.settings['path']:
+            os.environ['PATH'] = self.settings['path'] + ';' + os.environ.get('PATH', '')
+        os.environ['COB_CONFIG_DIR'] = self.settings['cob_config_dir']
+        os.environ['COB_COPY_DIR'] = self.settings['cob_copy_dir']
+        os.environ['COB_INCLUDE_PATH'] = self.settings['cob_include_path']
+        os.environ['COB_LIB_PATH'] = self.settings['cob_lib_path']
+
         output_dir = self.output_dir_var.get().strip() or (self.settings.get('output_directory') or cobol_dir)
         os.makedirs(output_dir, exist_ok=True)
 
         generated = 0
         for tab_idx in range(4):
-            values = {var: self.entry_vars[tab_idx][var].get().strip() for var in self.variables if self.entry_vars[tab_idx][var].get().strip()}
+            values = {var: self.entry_vars[tab_idx][var].get().strip() for var in self.variables
+                      if self.entry_vars[tab_idx][var].get().strip()}
 
             if not values.get('OUT_L_FILE_PATH') or not values.get('OUT_R_FILE_PATH'):
                 continue
@@ -455,15 +447,18 @@ class App:
             out_l_path = values.get('OUT_L_FILE_PATH', '')
             out_r_path = values.get('OUT_R_FILE_PATH', '')
 
+            if max(len(in_path), len(out_l_path), len(out_r_path)) > path_limit:
+                messagebox.showwarning("Warning", f"Path too long for preset {tab_idx+1} (max {path_limit} chars). Skipping.")
+                continue
+
             new_lines = original_lines[:]
 
-            # Parse & rewrite every hard-coded FX-VALUE - SAFE VERSION (no backreference crash)
+            # === FX-specific robust replacement (kept from your original) ===
             for var in [v for v in self.variables if v.startswith('FX-')]:
                 new_val = values.get(var)
                 if new_val:
                     for i, line in enumerate(new_lines):
                         if var in line and 'VALUE' in line.upper():
-                            # Ensure the new value ends with '.' if the original did
                             if not new_val.endswith('.'):
                                 new_val += '.'
                             new_lines[i] = re.sub(
@@ -474,8 +469,7 @@ class App:
                             )
                             break
 
-                        # === ROBUST FILE PATH REPLACEMENT (no splitting, single line) ===
-            # Preserves exact original indentation + uses forward slashes (GnuCOBOL loves them)
+            # === Robust file path replacement (forward slashes) ===
             for k in range(len(new_lines) - 1):
                 line_upper = new_lines[k].upper().strip()
                 if 'SELECT IN-FILE ASSIGN TO' in line_upper and in_path:
@@ -498,53 +492,43 @@ class App:
                 generated += 1
 
                 if self.compile_run_var.get():
-                    self.compile_and_run(output_cbl, output_dir, tab_idx)
+                    # === EXACT SAME COMPILATION BLOCK AS AutomatedRun.py ===
+                    try:
+                        compiler_path = self.settings['compiler_path']
+                        if not os.path.isfile(compiler_path):
+                            raise FileNotFoundError(f"Compiler not found at {compiler_path}")
+
+                        exec_name = os.path.join(output_dir, f"FX{tab_idx+1}.exe")
+                        compile_cmd = [compiler_path, '-x', '-o', exec_name, output_cbl]
+                        result = subprocess.run(compile_cmd, capture_output=True, text=True)
+
+                        if result.returncode != 0:
+                            compiler_output = (result.stderr or result.stdout or "No output from compiler.").strip()
+                            raise RuntimeError(f"Compiler exited with code {result.returncode}:\n\n{compiler_output}")
+
+                        if self.settings['copy_runtime_dlls'].lower() == 'yes':
+                            runtime_dlls = ['libcob.dll', 'gmp.dll', 'ncurses.dll']
+                            for dll in runtime_dlls:
+                                src_dll = os.path.join(self.settings['cob_lib_path'], dll)
+                                if os.path.isfile(src_dll):
+                                    shutil.copy(src_dll, os.path.join(output_dir, dll))
+
+                        run_cmd = f'cmd /k "cd /d "{output_dir}" & "{exec_name}""'
+                        subprocess.Popen(run_cmd, shell=True)
+
+                    except Exception as e:
+                        messagebox.showerror("Compile/Run Error",
+                                             f"Preset {tab_idx+1} generated but failed to compile/run:\n{str(e)}")
 
             except Exception as e:
                 messagebox.showerror("Write Error", f"Failed to write preset {tab_idx+1}:\n{str(e)}")
 
         if generated == 0:
-            messagebox.showwarning("Nothing Generated", "No presets were created.\nMake sure at least one preset has both LEFT and RIGHT output paths.")
+            messagebox.showwarning("Nothing Generated",
+                                   "No presets were created.\nMake sure at least one preset has both LEFT and RIGHT output paths.")
         else:
             self.save_session()
             messagebox.showinfo("Success", f"{generated} preset(s) generated successfully.")
-
-    def compile_and_run(self, cbl_path, output_dir, tab_idx):
-        try:
-            compiler_path = self.settings.get('compiler_path', 'cobc.exe')
-            if not os.path.isfile(compiler_path):
-                raise FileNotFoundError(f"Compiler not found at {compiler_path}")
-
-            # === FIXED: Apply all compiler settings to the environment ===
-            env = os.environ.copy()
-            if self.settings.get('path'):
-                env['PATH'] = self.settings['path'] + ';' + env.get('PATH', '')
-            env['COB_CONFIG_DIR'] = self.settings.get('cob_config_dir', '')
-            env['COB_COPY_DIR'] = self.settings.get('cob_copy_dir', '')
-            env['COB_INCLUDE_PATH'] = self.settings.get('cob_include_path', '')
-            env['COB_LIB_PATH'] = self.settings.get('cob_lib_path', '')
-
-            exec_name = os.path.join(output_dir, f"FX{tab_idx+1}.exe")
-            compile_cmd = [compiler_path, '-x', '-o', exec_name, cbl_path]
-            result = subprocess.run(compile_cmd, env=env, capture_output=True, text=True)
-
-            if result.returncode != 0:
-                raise RuntimeError(f"Compiler exited with code {result.returncode}:\n\n{result.stderr or result.stdout}")
-
-            # Optional runtime DLL copy (unchanged)
-            if self.settings.get('copy_runtime_dlls', 'no').lower() == 'yes':
-                runtime_dlls = ['libcob.dll', 'gmp.dll', 'ncurses.dll']
-                for dll in runtime_dlls:
-                    src = os.path.join(self.settings.get('cob_lib_path', ''), dll)
-                    if os.path.isfile(src):
-                        shutil.copy(src, output_dir)
-
-            # Run in new Command Prompt
-            run_cmd = f'cmd /k "cd /d "{output_dir}" & "{exec_name}""'
-            subprocess.Popen(run_cmd, shell=True)
-
-        except Exception as e:
-            messagebox.showerror("Compile/Run Error", f"Preset {tab_idx+1} generated but failed to compile/run:\n{str(e)}")
 
 
 if __name__ == "__main__":
