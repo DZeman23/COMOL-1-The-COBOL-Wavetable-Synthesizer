@@ -7,11 +7,11 @@
       * /\          FILE HANDLES          /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
            SELECT IN-FILE ASSIGN TO
-           "Your/filepath/here.raw"
+           "your/filepath/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
            SELECT OUT-FILE ASSIGN TO
-           "Your/filepath/here.raw"
+           "your/filepath/here.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
        DATA DIVISION.
@@ -41,7 +41,7 @@
            05  Q-KNOB-POSITION     PIC 9(3).
       * Added for Weighting System
            05  BASE-CUTOFF         PIC 9(3)V9(8).
-           05  TVF-DEPTH           PIC S9(3).
+           05  TVF-DEPTH           PIC S9(3)V9(10).
            05  DEPTH-CALC          PIC S9(5)V9(8).
            05  OPERATION-MODE      PIC 9(1).
            88  DIGITAL-MODE        VALUE 1.
@@ -163,6 +163,17 @@
        01  SINE-MATH-VARS      USAGE COMP-5.
            05  TEMP-ANGLE      PIC S9(3)V9(15) COMP-5.
            05  LOOP-COUNTER    PIC 9(4) BINARY.
+
+       01  FILTER-COEFF-LUT.
+           05  LUT-ENTRY OCCURS 1001 TIMES INDEXED BY LUT-IDX.
+               10  L-B0 PIC S9(3)V9(8) COMP-5.
+               10  L-B1 PIC S9(3)V9(8) COMP-5.
+               10  L-B2 PIC S9(3)V9(8) COMP-5.
+               10  L-A1 PIC S9(3)V9(8) COMP-5.
+               10  L-A2 PIC S9(3)V9(8) COMP-5.
+
+       01  LUT-MATH-VARS USAGE COMP-5.
+           05  LUT-KNOB-TEMP PIC 9(3)V9(8).
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\            RESAMPLE            /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
@@ -268,6 +279,10 @@
            05  STAGE-DURATION      PIC 9(9).
            05  FRAC-POS            PIC S9V9(8).
 
+
+       01  COEFF-SMOOTH-VARS   USAGE COMP-5.
+       05  SMOOTHED-DEPTH      PIC S9(3)V9(8) VALUE 77.
+       05  SMOOTH-RATE         PIC 9V9(8)     VALUE 0.005.
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\      OUTPUT PCM VARIABLES      /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
@@ -301,10 +316,14 @@
            PERFORM GET-FILTER-SETTINGS.
            PERFORM CALCULATE-FILTER-COEFFICIENTS.
 
+      * ==========================================
+      * >>>> FAST IIR COEFFICIENT GENERATOR <<<<
+           PERFORM GENERATE-FILTER-LUT.
+      * ==========================================
+
            PERFORM GET-ENVELOPE-SETTINGS.
       * >>>> PRE-CALCULATE TVF ENVELOPE <<<<
            PERFORM CALCULATE-CUT-BREAKPOINTS.
-
            DISPLAY "Processing...".
 
       * STAGE 1: ATTACK (0 to L1 over T1)
@@ -312,21 +331,25 @@
            MOVE L1  TO END-VOLUME.
            MOVE T1  TO DURATION-SECONDS.
            PERFORM RUN-ENVELOPE-STAGE.
+
       * STAGE 2: DECAY 1 (L1 to L2 over T2)
            MOVE L1  TO START-VOLUME.
            MOVE L2  TO END-VOLUME.
            MOVE T2  TO DURATION-SECONDS.
            PERFORM RUN-ENVELOPE-STAGE.
+
       * STAGE 3: DECAY 2 (L2 to L3 over T3)
            MOVE L2  TO START-VOLUME.
            MOVE L3  TO END-VOLUME.
            MOVE T3  TO DURATION-SECONDS.
            PERFORM RUN-ENVELOPE-STAGE.
+
       * STAGE 4: SUSTAIN (Hold L3 over T-SUSTAIN)
            MOVE L3        TO START-VOLUME.
            MOVE L3        TO END-VOLUME.
            MOVE T-SUSTAIN TO DURATION-SECONDS.
            PERFORM RUN-ENVELOPE-STAGE.
+
       * STAGE 5: RELEASE (L3 to 0 over T4)
            MOVE L3  TO START-VOLUME.
            MOVE 0 TO END-VOLUME.
@@ -341,7 +364,7 @@
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
        GET-WAVE-SOURCE.
       * USER_INPUT: WAVE-SOURCE-CHOICE
-           MOVE 1 TO WAVE-SOURCE-CHOICE.
+           MOVE 2 TO WAVE-SOURCE-CHOICE.
            IF WAVE-SOURCE-CHOICE = 2
                PERFORM LOAD-FILE-TO-TABLE
            ELSE
@@ -388,7 +411,7 @@
            END-PERFORM.
        GET-PITCH-SETTINGS.
       * USER_INPUT: USER-OCTAVE
-           MOVE 4 TO USER-OCTAVE.
+           MOVE 3 TO USER-OCTAVE.
       * USER_INPUT: USER-NOTE
            MOVE 0 TO USER-NOTE.
       * Logic from NOTE-SELECTOR.CPY determines which paragraph to run
@@ -407,7 +430,7 @@
 
        GET-INTERPOLATION-MODE.
       * USER_INPUT: RAW-PATTERN-INPUT
-           MOVE "3331" TO RAW-PATTERN-INPUT.
+           MOVE "3" TO RAW-PATTERN-INPUT.
 
            PERFORM PARSE-PATTERN.
 
@@ -442,7 +465,7 @@
       * USER_INPUT: BIAS-INTENSITY
                MOVE 0 TO BIAS-INTENSITY
       * USER_INPUT: USER-DRIVE-IN
-               MOVE 2 TO USER-DRIVE-IN
+               MOVE 0 TO USER-DRIVE-IN
                COMPUTE DRIVE-FACTOR = USER-DRIVE-IN / 2.0
                IF DRIVE-FACTOR < 1.0 MOVE 1.0 TO DRIVE-FACTOR END-IF
 
@@ -463,12 +486,12 @@
                WHEN OTHER MOVE 1 TO ACTIVE-FILTER-TYPE
            END-EVALUATE.
       * USER_INPUT: KNOB-POSITION
-           MOVE 50 TO KNOB-POSITION.
+           MOVE 77 TO KNOB-POSITION.
       * Save the static base value
            MOVE KNOB-POSITION TO BASE-CUTOFF.
 
       * USER_INPUT: Q-KNOB-POSITION
-           MOVE 0 TO Q-KNOB-POSITION.
+           MOVE 10 TO Q-KNOB-POSITION.
 
        CALCULATE-FILTER-COEFFICIENTS.
       * 1. Get Freq from Table
@@ -539,40 +562,40 @@
 
        GET-ENVELOPE-SETTINGS.
       * USER_INPUT: T1
-           MOVE 0.1 TO T1.
+           MOVE 2.50 TO T1.
       * USER_INPUT: L1
            MOVE 100 TO L1.
       * USER_INPUT: T2
-           MOVE 0.5 TO T2.
+           MOVE 1.50 TO T2.
       * USER_INPUT: L2
-           MOVE 80 TO L2.
+           MOVE 90 TO L2.
       * USER_INPUT: T3
-           MOVE 1.0 TO T3.
+           MOVE 2.00 TO T3.
       * USER_INPUT: L3
-           MOVE 50 TO L3.
+           MOVE 80 TO L3.
       * USER_INPUT: T-SUSTAIN
-           MOVE 2.0 TO T-SUSTAIN.
+           MOVE 4.00 TO T-SUSTAIN.
       * USER_INPUT: T4
-           MOVE 1.0 TO T4.
+           MOVE 3.00 TO T4.
 
       * USER_INPUT: CUT-T1
-           MOVE 0.1 TO CUT-T1.
+           MOVE 2.00 TO CUT-T1.
       * USER_INPUT: CUT-L1
-           MOVE 20 TO CUT-L1.
+           MOVE 100 TO CUT-L1.
       * USER_INPUT: CUT-T2
-           MOVE 0.5 TO CUT-T2.
+           MOVE 1.50 TO CUT-T2.
       * USER_INPUT: CUT-L2
-           MOVE 10 TO CUT-L2.
+           MOVE 90 TO CUT-L2.
       * USER_INPUT: CUT-T3
-           MOVE 1.0 TO CUT-T3.
+           MOVE 2.00 TO CUT-T3.
       * USER_INPUT: CUT-L3
-           MOVE 0 TO CUT-L3.
+           MOVE 80 TO CUT-L3.
       * USER_INPUT: CUT-T-SUSTAIN
-           MOVE 2.0 TO CUT-T-SUSTAIN.
+           MOVE 4.00 TO CUT-T-SUSTAIN.
       * USER_INPUT: CUT-T4
-           MOVE 1.0 TO CUT-T4.
+           MOVE 3.00 TO CUT-T4.
       * USER_INPUT: TVF-DEPTH
-           MOVE 50 TO TVF-DEPTH.
+           MOVE 20 TO TVF-DEPTH.
        CALCULATE-CUT-BREAKPOINTS.
       * Stage 1: Attack
            MOVE 1 TO STAGE-START-SAMPLE-CUT(1).
@@ -689,27 +712,29 @@
                - STAGE-START-CUT-VAL(CURRENT-STAGE-CUT)) * FRAC-POS.
 
        RECALCULATE-COEFFICIENTS.
-      * 1. Calculate Envelope Modulation
-           COMPUTE DEPTH-CALC = CURRENT-KNOB * (TVF-DEPTH / 100.0).
-           COMPUTE DEPTH-CALC = BASE-CUTOFF + DEPTH-CALC.
+      *      1. Calculate Envelope Modulation
+           COMPUTE DEPTH-CALC = BASE-CUTOFF +
+                (CURRENT-KNOB * TVF-DEPTH / 100.0).
 
-      * 2. Clamp Range
-           IF DEPTH-CALC > 100 MOVE 100 TO DEPTH-CALC.
-           IF DEPTH-CALC < 0   MOVE 0   TO DEPTH-CALC.
+      *      2. Clamp Range to 0-100
+       IF DEPTH-CALC > 100 MOVE 100 TO DEPTH-CALC END-IF.
+       IF DEPTH-CALC < 0   MOVE 0   TO DEPTH-CALC END-IF.
 
-      * 3. Convert Knob (0-100) to Table Index (1-5001)
-           COMPUTE LOOKUP-IDX = (DEPTH-CALC * 50) + 1.
+      *      3. Smooth toward target (one-pole IIR on the control signal)
+       COMPUTE SMOOTHED-DEPTH = SMOOTHED-DEPTH +
+           SMOOTH-RATE * (DEPTH-CALC - SMOOTHED-DEPTH).
 
-      * 4. DIRECT LOOKUP (Using Original Variable Names)
-           MOVE TBL-SINE-VAL(LOOKUP-IDX) TO FINAL-SINE-VALUE.
-           MOVE TBL-COS-VAL(LOOKUP-IDX)  TO FINAL-COS-VALUE.
+      *      4. Map smoothed value to LUT index
+       COMPUTE LUT-IDX = FUNCTION INTEGER(SMOOTHED-DEPTH * 10) + 1.
+       IF LUT-IDX < 1    MOVE 1    TO LUT-IDX END-IF.
+       IF LUT-IDX > 1001 MOVE 1001 TO LUT-IDX END-IF.
 
-      * 5. Calculate Resonance
-           COMPUTE ALPHA-VALUE ROUNDED =
-               FINAL-SINE-VALUE / (2 * Q-RESONANCE).
-
-      * 6. Finalize Biquad Coefficients
-           PERFORM INIT-COEFFICIENTS.
+      *      5. Direct Fetch
+       MOVE L-B0(LUT-IDX) TO B0-COEFF.
+       MOVE L-B1(LUT-IDX) TO B1-COEFF.
+       MOVE L-B2(LUT-IDX) TO B2-COEFF.
+       MOVE L-A1(LUT-IDX) TO A1-COEFF.
+       MOVE L-A2(LUT-IDX) TO A2-COEFF.
 
        CALCULATE-ANGULAR-FREQUENCY.
            COMPUTE NUMERATOR-VAL = CURRENT-FREQ-HZ / SAMPLE-RATE.
@@ -939,4 +964,49 @@
        ASCII-VANITY.
            COPY ASCII-ART.
 
+       GENERATE-FILTER-LUT.
+           DISPLAY "Pre-calculating TVF Coefficient Table...".
+           PERFORM VARYING LUT-IDX FROM 1 BY 1 UNTIL LUT-IDX > 1001
+      * 1. Map Index 1-1001 to Knob Range 0.0 - 100.0
+               COMPUTE LUT-KNOB-TEMP = (LUT-IDX - 1) / 10.0
 
+      * 2. Split into Integer and Fractional parts
+               COMPUTE KNOB-INT = FUNCTION INTEGER(LUT-KNOB-TEMP)
+               COMPUTE KNOB-FRAC = LUT-KNOB-TEMP - KNOB-INT
+               COMPUTE LOOKUP-IDX = KNOB-INT + 1
+
+      * 3. Fetch base frequency and next frequency
+               MOVE FREQ-HZ(LOOKUP-IDX) TO FREQ-FLOOR
+
+      * Guard against over-reading the table bounds at the maximum value
+               IF LOOKUP-IDX < 101
+                   MOVE FREQ-HZ(LOOKUP-IDX + 1) TO FREQ-CEIL
+               ELSE
+                   MOVE FREQ-FLOOR TO FREQ-CEIL
+               END-IF
+
+      * 4. Linearly interpolate the exact target frequency
+               COMPUTE CURRENT-FREQ-HZ =
+                   FREQ-FLOOR + ((FREQ-CEIL - FREQ-FLOOR) * KNOB-FRAC)
+
+      * 5. Proceed with Omega/Trig Math using the smoothed frequency
+               COMPUTE NUMERATOR-VAL = CURRENT-FREQ-HZ / SAMPLE-RATE
+               COMPUTE ANGULAR-FREQUENCY = PI-2 * NUMERATOR-VAL
+
+      * 6. Do the slow SEARCH lookups here (only happens at startup!)
+               PERFORM FIND-SINE-FROM-OMEGA
+               PERFORM FIND-COS-FROM-OMEGA
+
+      * 7. Calculate Resonance & Coefficients
+               COMPUTE ALPHA-VALUE ROUNDED =
+                   FINAL-SINE-VALUE / (2 * Q-RESONANCE)
+               PERFORM INIT-COEFFICIENTS
+
+      * 8. Save the final coefficients into the LUT
+               MOVE B0-COEFF TO L-B0(LUT-IDX)
+               MOVE B1-COEFF TO L-B1(LUT-IDX)
+               MOVE B2-COEFF TO L-B2(LUT-IDX)
+               MOVE A1-COEFF TO L-A1(LUT-IDX)
+               MOVE A2-COEFF TO L-A2(LUT-IDX)
+           END-PERFORM.
+           DISPLAY "Filter LUT Ready.".
