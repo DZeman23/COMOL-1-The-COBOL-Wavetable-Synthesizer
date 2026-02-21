@@ -13,19 +13,23 @@
        FILE-CONTROL.
 
            SELECT IN-FILE  ASSIGN TO
-           "path\to\audio\to\process.raw"
+           "your/filepath/here.raw"
                ORGANIZATION IS SEQUENTIAL
                ACCESS MODE  IS SEQUENTIAL
                FILE STATUS  IS WS-IN-STATUS.
 
+           SELECT SINC-FILE ASSIGN TO
+           "your/filepath/here.raw"
+           ORGANIZATION IS BINARY SEQUENTIAL.
+
            SELECT OUT-FILE-L ASSIGN TO
-           "path\to\audio\left.raw"
+           "C:\Users\Vicky Myburgh\Desktop\Sine Generator\Output2.raw"
                ORGANIZATION IS SEQUENTIAL
                ACCESS MODE  IS SEQUENTIAL
                FILE STATUS  IS WS-OUT-STATUS.
 
            SELECT OUT-FILE-R ASSIGN TO
-           "path\to\audio\right.raw"
+           "C:\Users\Vicky Myburgh\Desktop\Sine Generator\Output3.raw"
                ORGANIZATION IS SEQUENTIAL
                ACCESS MODE  IS SEQUENTIAL
                FILE STATUS  IS WS-OUT-STATUS.
@@ -269,8 +273,10 @@
            05  LFO-VAL         PIC S9(1)V9(4).
            05  MOD-OFFSET      PIC S9(5)V9(4) COMP-5.
 
-           05  DC-IN-OLD       PIC S9(7)V9(4) COMP-5 VALUE 0.
-           05  DC-OUT-OLD      PIC S9(7)V9(4) COMP-5 VALUE 0.
+           05  DC-IN-L-OLD     PIC S9(7)V9(4) COMP-5 VALUE 0.
+           05  DC-OUT-L-OLD    PIC S9(7)V9(4) COMP-5 VALUE 0.
+           05  DC-IN-R-OLD     PIC S9(7)V9(4) COMP-5 VALUE 0.
+           05  DC-OUT-R-OLD    PIC S9(7)V9(4) COMP-5 VALUE 0.
 
        PROCEDURE DIVISION.
        0000-MAIN-CONTROL.
@@ -546,28 +552,18 @@
            IF C-READ-PTR >= 4097 SUBTRACT 4096 FROM C-READ-PTR.
 
        4950-LINEAR-INTERPOLATE-LEFT.
-      * Linear interpolation for any left-channel chorus voice
-           COMPUTE LI-IDX-A = FUNCTION INTEGER(C-READ-PTR).
-           COMPUTE LI-IDX-B = LI-IDX-A + 1.
-           IF LI-IDX-B > 4096 MOVE 1 TO LI-IDX-B.
-           COMPUTE LI-FRAC = C-READ-PTR - LI-IDX-A.
-           COMPUTE LI-INV-FRAC = 1.0 - LI-FRAC.
-           MOVE CHORUS-BUF-L(LI-IDX-A) TO LI-SAMP-A.
-           MOVE CHORUS-BUF-L(LI-IDX-B) TO LI-SAMP-B.
-           COMPUTE WET-L = (LI-SAMP-A * LI-INV-FRAC) +
-                           (LI-SAMP-B * LI-FRAC).
+      * Rewritten to bridge into the Sinc Engine
+           COMPUTE READ-IDX = FUNCTION INTEGER(C-READ-PTR).
+           COMPUTE INTERP-FRAC = C-READ-PTR - READ-IDX.
+           PERFORM 8600-CALCULATE-SINC-L.
+           MOVE SUM-ACCUM TO WET-L.
 
        4960-LINEAR-INTERPOLATE-RIGHT.
-      * Linear interpolation for any right-channel chorus voice
-           COMPUTE LI-IDX-A = FUNCTION INTEGER(C-READ-PTR).
-           COMPUTE LI-IDX-B = LI-IDX-A + 1.
-           IF LI-IDX-B > 4096 MOVE 1 TO LI-IDX-B.
-           COMPUTE LI-FRAC = C-READ-PTR - LI-IDX-A.
-           COMPUTE LI-INV-FRAC = 1.0 - LI-FRAC.
-           MOVE CHORUS-BUF-R(LI-IDX-A) TO LI-SAMP-A.
-           MOVE CHORUS-BUF-R(LI-IDX-B) TO LI-SAMP-B.
-           COMPUTE WET-R = (LI-SAMP-A * LI-INV-FRAC) +
-                           (LI-SAMP-B * LI-FRAC).
+      * Rewritten to bridge into the Sinc Engine
+           COMPUTE READ-IDX = FUNCTION INTEGER(C-READ-PTR).
+           COMPUTE INTERP-FRAC = C-READ-PTR - READ-IDX.
+           PERFORM 8700-CALCULATE-SINC-R.
+           MOVE SUM-ACCUM TO WET-R.
 
        5000-EFFECT-DELAY-STEREO.
       * (kept as single paragraph - already concise and self-documenting)
@@ -677,15 +673,19 @@
 
        7000-DC-BLOCKER-STEREO.
       * (kept as-is - already short and clear)
+
+      * Left Channel
            COMPUTE TEMP-SAMPLE =
-               SAMPLE-L - DC-IN-OLD + (0.995 * DC-OUT-OLD).
-           MOVE SAMPLE-L TO DC-IN-OLD.
-           MOVE TEMP-SAMPLE TO DC-OUT-OLD.
+               SAMPLE-L - DC-IN-L-OLD + (0.995 * DC-OUT-L-OLD).
+           MOVE SAMPLE-L TO DC-IN-L-OLD.
+           MOVE TEMP-SAMPLE TO DC-OUT-L-OLD.
            MOVE TEMP-SAMPLE TO SAMPLE-L.
+
+      * Right Channel
            COMPUTE TEMP-SAMPLE =
-               SAMPLE-R - DC-IN-OLD + (0.995 * DC-OUT-OLD).
-           MOVE SAMPLE-R TO DC-IN-OLD.
-           MOVE TEMP-SAMPLE TO DC-OUT-OLD.
+               SAMPLE-R - DC-IN-R-OLD + (0.995 * DC-OUT-R-OLD).
+           MOVE SAMPLE-R TO DC-IN-R-OLD.
+           MOVE TEMP-SAMPLE TO DC-OUT-R-OLD.
            MOVE TEMP-SAMPLE TO SAMPLE-R.
 
        8000-ZERO-ALL-BUFFERS.
@@ -861,16 +861,14 @@
            END-PERFORM.
 
        8700-CALCULATE-SINC-R.
-      * (unchanged - utility, not called in main path)
            MOVE 0 TO SUM-ACCUM
            COMPUTE PHASE-INDEX =
                FUNCTION INTEGER(INTERP-FRAC * PHASE-SCALER) + 1
-           IF PHASE-INDEX < 1
-               MOVE 1 TO PHASE-INDEX
-           END-IF
+           IF PHASE-INDEX < 1 MOVE 1 TO PHASE-INDEX END-IF
            IF PHASE-INDEX > PHASE-RESOLUTION
                MOVE PHASE-RESOLUTION TO PHASE-INDEX
            END-IF
+
            PERFORM VARYING KERNEL-INDEX FROM -4 BY 1
                UNTIL KERNEL-INDEX > 4
                COMPUTE LOOKUP-INDEX = READ-IDX + KERNEL-INDEX
@@ -881,9 +879,7 @@
                IF LOOKUP-INDEX > 4096
                    SUBTRACT 4096 FROM LOOKUP-INDEX
                END-IF
-               IF LOOKUP-INDEX > 2048
-                   SUBTRACT 2048 FROM LOOKUP-INDEX
-               END-IF
+
                COMPUTE TEMP-INDEX-CALC = KERNEL-INDEX + 5
                MOVE CHORUS-FILTER-TAP (PHASE-INDEX, TEMP-INDEX-CALC)
                    TO RAW-TABLE-VAL
