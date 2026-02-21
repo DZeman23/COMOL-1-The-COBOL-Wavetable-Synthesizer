@@ -4,6 +4,7 @@ import os
 import platform
 import subprocess
 import configparser
+import shutil
 
 class Tooltip:
     def __init__(self, widget, text):
@@ -293,22 +294,24 @@ class App:
 
     def load_settings(self):
         config = configparser.ConfigParser()
+        defaults = {
+            'compiler_path': 'cobc.exe',
+            'path': '',
+            'cob_config_dir': '',
+            'cob_copy_dir': '',
+            'cob_include_path': '',
+            'cob_lib_path': '',
+            'vcvarsall_path': '',
+            'output_directory': 'bin',
+            'copy_runtime_dlls': 'no'
+        }
         if os.path.exists(self.config_file):
             config.read(self.config_file)
-            return dict(config['DEFAULT'])
-        else:
-            # Default values
-            return {
-                'compiler_path': 'cobc.exe',
-                'path': '',
-                'cob_config_dir': '',
-                'cob_copy_dir': '',
-                'cob_include_path': '',
-                'cob_lib_path': '',
-                'vcvarsall_path': '',
-                'output_directory': 'bin',
-                'copy_runtime_dlls': 'no'
-            }
+            if 'DEFAULT' in config:
+                for key in defaults:
+                    if key in config['DEFAULT']:
+                        defaults[key] = config['DEFAULT'][key]
+        return defaults
 
     def save_settings(self, new_settings):
         config = configparser.ConfigParser()
@@ -362,6 +365,10 @@ class App:
     def open_settings(self):
         settings_win = tk.Toplevel(self.root)
         settings_win.title("Compiler Settings")
+        settings_win.geometry("820x580")
+        settings_win.resizable(True, True)
+        settings_win.transient(self.root)
+        settings_win.grab_set()          # modal
 
         descriptions = {
             'compiler_path': "Full path to the COBOL compiler executable (e.g., cobc.exe).",
@@ -378,22 +385,33 @@ class App:
         entry_vars = {}
         row = 0
         for key, default in self.settings.items():
-            tk.Label(settings_win, text=key.capitalize().replace('_', ' ') + ":").grid(row=row, column=0, sticky='w', padx=5, pady=5)
+            label_text = key.replace('_', ' ').title() + ":"
+            tk.Label(settings_win, text=label_text, font=('Helvetica', 10)).grid(
+                row=row, column=0, padx=(30, 12), pady=10, sticky='e')
+
             entry_vars[key] = tk.StringVar(value=default)
-            entry = tk.Entry(settings_win, textvariable=entry_vars[key], width=60)
-            entry.grid(row=row, column=1, padx=5, pady=5)
+            entry = tk.Entry(settings_win, textvariable=entry_vars[key], width=75, font=('Helvetica', 9))
+            entry.grid(row=row, column=1, padx=(0, 30), pady=10, sticky='ew')
+
             Tooltip(entry, descriptions.get(key, "No description available."))
             row += 1
 
+        settings_win.columnconfigure(1, weight=1)
+
         def save_and_close():
-            new_settings = {k: entry_vars[k].get() for k in self.settings}
+            new_settings = {k: entry_vars[k].get().strip() for k in self.settings}
             self.save_settings(new_settings)
             self.settings = new_settings
             settings_win.destroy()
             messagebox.showinfo("Settings Saved", "Compiler settings have been updated and saved.")
 
-        btn_save = tk.Button(settings_win, text="Save Settings", command=save_and_close)
-        btn_save.grid(row=row, column=0, columnspan=2, pady=10)
+        btn_frame = tk.Frame(settings_win)
+        btn_frame.grid(row=row + 1, column=0, columnspan=2, pady=30)
+
+        tk.Button(btn_frame, text="Cancel", width=14, padx=20, pady=8,
+                  command=settings_win.destroy).pack(side='right', padx=12)
+        tk.Button(btn_frame, text="Save Settings", width=16, font=('Helvetica', 10, 'bold'),
+                  padx=25, pady=8, command=save_and_close).pack(side='right', padx=12)
 
     def copy_waveform(self, src, dst):
         for var in self.variables:
