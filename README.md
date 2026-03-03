@@ -1,4 +1,5 @@
 # COMOL-1: The COBOL Wavetable Synthesizer
+### **NOTE: The available documentation is now severely out of date. Please be patient while I update them. Many new features have been added. Please check the changelog for more.**
 
 This is a highly flexible and versatile wavetable synthesizer written entirely in COBOL.
 In the long term, I aim to develop this project to create a program that fully emulates
@@ -229,7 +230,7 @@ The pattern repeats throughout playback. Shorter patterns create rhythmic digita
 
 # To Do List:
 
-1. Implement LFOs 
+1. ~~Implement LFOs~~ 
 2. ~~Update the filter from a static to a dynamic time variant style.~~ 
 3. Write a Mainframe compliant version of the code. 
 4. Expand the sample bank with all the waveforms from the original JD800.
