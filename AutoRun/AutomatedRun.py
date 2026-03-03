@@ -34,6 +34,25 @@ class App:
         self.root.title("COBOL Waveform Configurator")
         self.root.geometry("960x740")
 
+        # Add menu bar
+        menubar = tk.Menu(self.root)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Save Template", command=self.save_template)
+        file_menu.add_command(label="Load Template", command=self.load_template)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.on_close)
+        menubar.add_cascade(label="File", menu=file_menu)
+
+        settings_menu = tk.Menu(menubar, tearoff=0)
+        settings_menu.add_command(label="Compiler Settings", command=self.open_settings)
+        menubar.add_cascade(label="Settings", menu=settings_menu)
+
+        generate_menu = tk.Menu(menubar, tearoff=0)
+        generate_menu.add_command(label="Generate All Waveforms", command=self.generate)
+        menubar.add_cascade(label="Generate", menu=generate_menu)
+
+        self.root.config(menu=menubar)
+
         self.config_file = 'config_waveform.ini'
         self.settings = self.load_settings()
 
@@ -119,6 +138,29 @@ class App:
             'CUT-T-SUSTAIN': "Cutoff Sustain Duration (e.g. 2.0)",
             'CUT-T4': "Cutoff Release Time (e.g. 1.0)",
             'TVF-DEPTH': "-100 to 100 (Envelope Depth)",
+            # === NEW LFO PARAMETERS (added here only) ===
+            'LFO1-WAVEFORM': "1=Sine 2=Triangle 3=SawUp 4=SawDown 5=Square 6=S+H 7=SmoothRnd 8=UserRAW",
+            'LFO1-RATE-HZ': "LFO rate in Hz (0=off)",
+            'LFO1-DELAY-SEC': "Delay before LFO starts (seconds)",
+            'LFO1-FADE-SEC': "+N=fade-in N sec, -N=fade-out, 0=none",
+            'LFO1-OFFSET': "DC offset -100..+100",
+            'LFO1-KEY-TRIG': "1=reset phase on key, 0=free-running",
+            'LFO1-TVA-DEPTH': "Tremolo depth -100..+100",
+            'LFO1-TVF-DEPTH': "Filter wobble depth -100..+100",
+            'LFO1-PTCH-DPTH': "Vibrato depth -120..+120 (10 units = 1 semitone)",
+            'LFO1-PHASE-OFFS': "Starting phase 0-359 degrees",
+            'LFO1-FM-DEPTH': "LFO1 → LFO2 rate FM depth -100..+100",
+            'LFO2-WAVEFORM': "1=Sine 2=Triangle 3=SawUp 4=SawDown 5=Square 6=S+H 7=SmoothRnd 8=UserRAW",
+            'LFO2-RATE-HZ': "LFO rate in Hz (0=off)",
+            'LFO2-DELAY-SEC': "Delay before LFO starts (seconds)",
+            'LFO2-FADE-SEC': "+N=fade-in N sec, -N=fade-out, 0=none",
+            'LFO2-OFFSET': "DC offset -100..+100",
+            'LFO2-KEY-TRIG': "1=reset phase on key, 0=free-running",
+            'LFO2-TVA-DEPTH': "Tremolo depth -100..+100",
+            'LFO2-TVF-DEPTH': "Filter wobble depth -100..+100",
+            'LFO2-PTCH-DPTH': "Vibrato depth -120..+120 (10 units = 1 semitone)",
+            'LFO2-PHASE-OFFS': "Starting phase 0-359 degrees",
+            # === end of new LFO parameters ===
             'IN_FILE_PATH': "Path to input raw file (for WAVE-SOURCE-CHOICE=2)",
             'OUT_FILE_PATH': "Path to output raw file"
         }
@@ -184,49 +226,6 @@ class App:
                         width=10
                     )
                     btn.pack(side='left', padx=4)
-
-        btn_frame = tk.Frame(self.root)
-        btn_frame.pack(pady=15)
-
-        btn_settings = tk.Button(
-            btn_frame,
-            text="Compiler Settings",
-            command=self.open_settings,
-            font=('Helvetica', 11, 'bold'),
-            padx=20,
-            pady=10
-        )
-        btn_settings.pack(side='left', padx=10)
-
-        btn_save_tmpl = tk.Button(
-            btn_frame,
-            text="Save Template",
-            command=self.save_template,
-            font=('Helvetica', 11, 'bold'),
-            padx=20,
-            pady=10
-        )
-        btn_save_tmpl.pack(side='left', padx=10)
-
-        btn_load_tmpl = tk.Button(
-            btn_frame,
-            text="Load Template",
-            command=self.load_template,
-            font=('Helvetica', 11, 'bold'),
-            padx=20,
-            pady=10
-        )
-        btn_load_tmpl.pack(side='left', padx=10)
-
-        btn_gen = tk.Button(
-            btn_frame,
-            text="Generate All Waveforms",
-            command=self.generate,
-            font=('Helvetica', 11, 'bold'),
-            padx=20,
-            pady=10
-        )
-        btn_gen.pack(side='left', padx=10)
 
         self.load_session()
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
