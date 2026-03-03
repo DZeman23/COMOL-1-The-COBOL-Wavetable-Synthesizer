@@ -7,11 +7,21 @@
       * /\          FILE HANDLES          /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
            SELECT IN-FILE ASSIGN TO
-           "your/filepath/here.raw"
+           "path/to/FineWine.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
            SELECT OUT-FILE ASSIGN TO
-           "your/filepath/here.raw"
+           "path/to/Output1.raw"
+           ORGANIZATION IS SEQUENTIAL
+           ACCESS MODE IS SEQUENTIAL.
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * /\   LFO USER WAVEFORM FILE      /\
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * Signed 16-bit PCM RAW, 2048 samples, 44100 Hz.
+      * Read at startup when LFO waveform type 8 is selected.
+      * Both LFO1 and LFO2 share this single source file.
+           SELECT LFO-FILE ASSIGN TO
+            "path/to/LFO-Wave.raw"
            ORGANIZATION IS SEQUENTIAL
            ACCESS MODE IS SEQUENTIAL.
        DATA DIVISION.
@@ -20,8 +30,14 @@
        01  RAW-BYTES           PIC X(1).
        FD  IN-FILE.
        01  BINARY-BYTES        PIC X(1).
+      * One-byte record for the LFO user RAW waveform source file.
+      * Read byte-by-byte to reconstruct little-endian 16-bit samples.
+       FD  LFO-FILE.
+       01  LFO-FILE-BYTE       PIC X(1).
 
        WORKING-STORAGE SECTION.
+       01  WS-DATE-TIME        PIC X(21).
+       01  WS-TIME-SEED        PIC 9(8).
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\       MENU & USER INPUT        /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
@@ -77,6 +93,155 @@
            05  X2-INPUT            PIC S9(6)V9(8) VALUE 0.
            05  Y1-OUTPUT           PIC S9(6)V9(8) VALUE 0.
            05  Y2-OUTPUT           PIC S9(6)V9(8) VALUE 0.
+
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * /\     LFO WAVETABLE MEMORY      /\
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * Each LFO has a private 2048-point float wavetable (-1.0..+1.0).
+      * Built once at startup by INIT-LFO1-TABLE / INIT-LFO2-TABLE.
+       01  LFO1-WAVE-TABLE.
+           05  LFO1-TBL-ENTRY  OCCURS 2048 TIMES
+                               INDEXED BY LFO1-TBL-IDX.
+               10  LFO1-TBL-SAMP PIC S9(1)V9(17) COMP-5.
+       01  LFO2-WAVE-TABLE.
+           05  LFO2-TBL-ENTRY  OCCURS 2048 TIMES
+                               INDEXED BY LFO2-TBL-IDX.
+               10  LFO2-TBL-SAMP PIC S9(1)V9(17) COMP-5.
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * /\     LFO 1 USER PARAMETERS     /\
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * WAVEFORM KEY:
+      *   1=Sine      2=Triangle  3=Sawtooth-Up
+      *   4=Sawtooth-Down  5=Square    6=Sample+Hold
+      *   7=Smooth-Random  8=User-RAW (loaded from LFO-Wave.raw)
+      * TVA-DEPTH: -100..+100. Scales LFO into amplitude (tremolo).
+      * TVF-DEPTH: -100..+100. Offsets CURRENT-KNOB (filter wobble).
+      * PTCH-DEPTH: 10 units = 1 semitone. +/-120 = +/-12 semitones.
+      * PHASE-OFFS: 0-359 degrees. LFO starting phase on key trigger.
+      * FADE-SEC:  +N = fade in over N seconds. -N = fade out.
+      * FM-DEPTH: LFO1 output scales LFO2 rate. -100..+100 percent.
+       01  LFO1-PARAMS.
+           05  LFO1-WAVEFORM   PIC 9(1)      VALUE 1.
+               88  LFO1-SINE       VALUE 1.
+               88  LFO1-TRIANGLE   VALUE 2.
+               88  LFO1-SAW-UP     VALUE 3.
+               88  LFO1-SAW-DOWN   VALUE 4.
+               88  LFO1-SQUARE     VALUE 5.
+               88  LFO1-SH         VALUE 6.
+               88  LFO1-SMTH-RND   VALUE 7.
+               88  LFO1-USER-RAW   VALUE 8.
+           05  LFO1-RATE-HZ    PIC 9(3)V9(4) VALUE 0.
+           05  LFO1-DELAY-SEC  PIC 9(3)V9(4) VALUE 0.
+           05  LFO1-FADE-SEC   PIC S9(3)     VALUE 0.
+           05  LFO1-OFFSET     PIC S9(3)     VALUE 0.
+           05  LFO1-KEY-TRIG   PIC 9(1)      VALUE 1.
+           05  LFO1-TVA-DEPTH  PIC S9(3)     VALUE 0.
+           05  LFO1-TVF-DEPTH  PIC S9(3)     VALUE 0.
+           05  LFO1-PTCH-DPTH  PIC S9(3)     VALUE 0.
+           05  LFO1-PHASE-OFFS PIC 9(3)      VALUE 0.
+           05  LFO1-FM-DEPTH   PIC S9(3)     VALUE 0.
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * /\     LFO 2 USER PARAMETERS     /\
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+       01  LFO2-PARAMS.
+           05  LFO2-WAVEFORM   PIC 9(1)      VALUE 1.
+               88  LFO2-SINE       VALUE 1.
+               88  LFO2-TRIANGLE   VALUE 2.
+               88  LFO2-SAW-UP     VALUE 3.
+               88  LFO2-SAW-DOWN   VALUE 4.
+               88  LFO2-SQUARE     VALUE 5.
+               88  LFO2-SH         VALUE 6.
+               88  LFO2-SMTH-RND   VALUE 7.
+               88  LFO2-USER-RAW   VALUE 8.
+           05  LFO2-RATE-HZ    PIC 9(3)V9(4) VALUE 0.
+           05  LFO2-DELAY-SEC  PIC 9(3)V9(4) VALUE 0.
+           05  LFO2-FADE-SEC   PIC S9(3)     VALUE 0.
+           05  LFO2-OFFSET     PIC S9(3)     VALUE 0.
+           05  LFO2-KEY-TRIG   PIC 9(1)      VALUE 1.
+           05  LFO2-TVA-DEPTH  PIC S9(3)     VALUE 0.
+           05  LFO2-TVF-DEPTH  PIC S9(3)     VALUE 0.
+           05  LFO2-PTCH-DPTH  PIC S9(3)     VALUE 0.
+           05  LFO2-PHASE-OFFS PIC 9(3)      VALUE 0.
+      * LFO2 has no FM-DEPTH (LFO1 is the FM source, LFO2 the target)
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * /\     LFO 1 RUNTIME STATE       /\
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * PHASE: current position in wavetable (0.0 to 2047.999...).
+      * STEP:  wavetable index advance per sample.
+      * DELAY-SMPL: total delay in samples (LFO silent until elapsed).
+      * DELAY-CNT:  counts down from DELAY-SMPL to 0.
+      * FADE-TOTAL: fade duration in samples (0 = no fade).
+      * FADE-CNT:   samples elapsed within current fade.
+      * FADE-AMT:   current fade multiplier (0.0 to 1.0).
+      * FADE-STEP:  added to FADE-AMT each sample (+ve in, -ve out).
+      * SH-HELD:    last captured value for Sample+Hold mode.
+      * SH-PERIOD:  samples between S+H triggers (= TABLE/STEP).
+      * SH-CNT:     samples since last S+H trigger.
+      * PREV-IDX:   previous integer table index (edge detection).
+       01  LFO1-STATE          USAGE COMP-5.
+           05  LFO1-PHASE      PIC 9(7)V9(8)  VALUE 0.
+           05  LFO1-STEP       PIC 9(4)V9(8)  VALUE 0.
+           05  LFO1-DELAY-SMPL PIC 9(9)       VALUE 0.
+           05  LFO1-DELAY-CNT  PIC 9(9)       VALUE 0.
+           05  LFO1-FADE-TOTAL PIC 9(9)       VALUE 0.
+           05  LFO1-FADE-CNT   PIC 9(9)       VALUE 0.
+           05  LFO1-FADE-AMT   PIC 9(1)V9(8)  VALUE 1.
+           05  LFO1-FADE-STEP  PIC S9(1)V9(10) VALUE 0.
+           05  LFO1-IS-ACTIVE  PIC 9(1)       VALUE 0.
+           05  LFO1-SH-HELD    PIC S9(1)V9(8) VALUE 0.
+           05  LFO1-SH-PERIOD  PIC 9(9)       VALUE 0.
+           05  LFO1-SH-CNT     PIC 9(9)       VALUE 0.
+           05  LFO1-PREV-IDX   PIC 9(4)       VALUE 0.
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * /\     LFO 2 RUNTIME STATE       /\
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+       01  LFO2-STATE          USAGE COMP-5.
+           05  LFO2-PHASE      PIC 9(7)V9(8)  VALUE 0.
+           05  LFO2-STEP       PIC 9(4)V9(8)  VALUE 0.
+           05  LFO2-DELAY-SMPL PIC 9(9)       VALUE 0.
+           05  LFO2-DELAY-CNT  PIC 9(9)       VALUE 0.
+           05  LFO2-FADE-TOTAL PIC 9(9)       VALUE 0.
+           05  LFO2-FADE-CNT   PIC 9(9)       VALUE 0.
+           05  LFO2-FADE-AMT   PIC 9(1)V9(8)  VALUE 1.
+           05  LFO2-FADE-STEP  PIC S9(1)V9(10) VALUE 0.
+           05  LFO2-IS-ACTIVE  PIC 9(1)       VALUE 0.
+           05  LFO2-SH-HELD    PIC S9(1)V9(8) VALUE 0.
+           05  LFO2-SH-PERIOD  PIC 9(9)       VALUE 0.
+           05  LFO2-SH-CNT     PIC 9(9)       VALUE 0.
+           05  LFO2-PREV-IDX   PIC 9(4)       VALUE 0.
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * /\     LFO OUTPUT + COMPUTE VARS  /\
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * LFO1-VALUE / LFO2-VALUE: final per-sample output (-1.0..+1.0)
+      *   after waveform lookup, fade, and DC offset are applied.
+      * LFO-TVA-OUT: combined amplitude mod signal. Post-filter.
+      * LFO-TVF-OUT: combined cutoff offset. Added to CURRENT-KNOB.
+      * LFO-PTCH-OUT: combined pitch shift in semitones.
+      * LFO-CALC-STEP: effective LFO2 step (after FM modulation).
+       01  LFO-OUTPUT-VARS     USAGE COMP-5.
+           05  LFO1-VALUE      PIC S9(1)V9(8) VALUE 0.
+           05  LFO2-VALUE      PIC S9(1)V9(8) VALUE 0.
+           05  LFO-TVA-OUT     PIC S9(2)V9(8) VALUE 0.
+           05  LFO-TVF-OUT     PIC S9(4)V9(8) VALUE 0.
+           05  LFO-PTCH-OUT    PIC S9(3)V9(8) VALUE 0.
+       01  LFO-COMPUTE-VARS    USAGE COMP-5.
+           05  LFO-CALC-IDX    PIC 9(4)       VALUE 0.
+           05  LFO-NEXT-IDX    PIC 9(4)       VALUE 0.
+           05  LFO-FRAC        PIC 9V9(8)     VALUE 0.
+           05  LFO-SAMP-A      PIC S9(1)V9(17) VALUE 0.
+           05  LFO-SAMP-B      PIC S9(1)V9(17) VALUE 0.
+           05  LFO-WORK-VAL    PIC S9(1)V9(8) VALUE 0.
+           05  LFO-2PI         PIC 9(1)V9(8)  VALUE 6.28318531.
+           05  LFO-RND-SEED    PIC 9(9)       VALUE 987654321.
+           05  LFO-RND-RESULT  PIC 9V9(8)     VALUE 0.
+           05  LFO-CALC-STEP   PIC S9(4)V9(8) VALUE 0.
+           05  LFO-MOD-RATE    PIC S9(2)V9(8) VALUE 0.
+           05  LFO-BUILD-IDX   PIC 9(4)       VALUE 0.
+           05  LFO-BUILD-ANG   PIC S9(3)V9(15) VALUE 0.
+           05  LFO-PTCH-ADJ    PIC S9(5)V9(8) VALUE 0.
+           05  LFO-FILE-W1     PIC S9(10)     VALUE 0.
+           05  LFO-FILE-W2     PIC S9(10)     VALUE 0.
+           05  LFO-FILE-BUF    PIC X(2).
 
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\   VIRTUAL ANALOGUE VARIABLES   /\
@@ -305,6 +470,20 @@
        PROCEDURE DIVISION.
 
        MAIN-LOGIC.
+
+           MOVE FUNCTION CURRENT-DATE TO WS-DATE-TIME.
+
+
+           MOVE WS-DATE-TIME(9:8) TO WS-TIME-SEED.
+
+
+           MOVE WS-TIME-SEED TO RANDOM-SEED.
+
+
+           COMPUTE LFO-RND-SEED = WS-TIME-SEED + 87654321.
+
+           PERFORM GENERATE-DRIFT.
+           COMPUTE READ-POSITION = (RANDOM-RESULT * 2047.0) + 1.0.
            PERFORM INIT-SINC-TABLE.
            OPEN OUTPUT OUT-FILE.
            PERFORM ASCII-VANITY.
@@ -324,6 +503,14 @@
            PERFORM GET-ENVELOPE-SETTINGS.
       * >>>> PRE-CALCULATE TVF ENVELOPE <<<<
            PERFORM CALCULATE-CUT-BREAKPOINTS.
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * /\   LFO SETUP (JD800 + EXTRAS)   /\
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * Hard-coded LFO parameters are set inside GET-LFO-SETTINGS.
+      * INIT-LFO-WAVEFORMS builds the wavetables and pre-computes
+      * all runtime state (step size, delay/fade counters, phase).
+           PERFORM GET-LFO-SETTINGS.
+           PERFORM INIT-LFO-WAVEFORMS.
            DISPLAY "Processing...".
 
       * STAGE 1: ATTACK (0 to L1 over T1)
@@ -672,12 +859,24 @@
        GENERATE-SAMPLE-BLOCK.
            PERFORM UPDATE-PROGRESS.
            PERFORM CALCULATE-INDICES.
+      * >>>> ADVANCE BOTH LFOs EACH SAMPLE <<<<
+      * Runs before TVF and TVA modulation paragraphs below.
+           PERFORM ADVANCE-LFO-ENGINES.
            PERFORM COMPUTE-RAW-SAMPLE.
+      * >>>> LFO PITCH MODULATION (VIBRATO) <<<<
+      * Offsets READ-POSITION fractionally each sample.
+           PERFORM APPLY-LFO-PITCH.
 
       * >>>> INSERT FILTER HERE <<<<
            PERFORM UPDATE-CUT-PARAMETER.
+      * >>>> LFO TVF MODULATION (FILTER WOBBLE) <<<<
+      * Adds the LFO signal to CURRENT-KNOB before LUT lookup.
+           PERFORM APPLY-LFO-TVF.
            PERFORM RECALCULATE-COEFFICIENTS.
            PERFORM APPLY-FILTER.
+      * >>>> LFO TVA MODULATION (TREMOLO) <<<<
+      * Scales INTERP-RESULT after filter, before volume write.
+           PERFORM APPLY-LFO-TVA.
            PERFORM APPLY-VOLUME-AND-WRITE.
            PERFORM ADVANCE-POINTERS.
 
@@ -906,6 +1105,20 @@
       * 3. Convert Float (-1.0 to 1.0) back to PCM Integer
            COMPUTE SCALED-SAMPLE = INTERP-RESULT * 32767.
 
+
+           IF SCALED-SAMPLE > 32767
+               MOVE 32767 TO SCALED-SAMPLE
+                   ELSE IF SCALED-SAMPLE < -32768
+                       MOVE -32768 TO SCALED-SAMPLE
+           END-IF.
+
+
+           IF SCALED-SAMPLE > 32767
+            MOVE 32767 TO SCALED-SAMPLE
+               ELSE IF SCALED-SAMPLE < -32768
+               MOVE -32768 TO SCALED-SAMPLE
+           END-IF.
+
            IF SCALED-SAMPLE < 0
                ADD 65536 TO SCALED-SAMPLE
            END-IF.
@@ -920,10 +1133,15 @@
 
        ADVANCE-POINTERS.
            ADD STEP-SIZE TO READ-POSITION.
-           PERFORM UNTIL READ-POSITION <= TABLE-FLOAT
-               SUBTRACT TABLE-FLOAT FROM READ-POSITION
-               ADD 1 TO READ-POSITION
-           END-PERFORM.
+
+
+           COMPUTE READ-POSITION
+               = FUNCTION MOD(READ-POSITION - 1, TABLE-FLOAT) + 1.
+
+
+           IF READ-POSITION < 1.0
+               MOVE 1.0 TO READ-POSITION
+           END-IF.
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
       * /\      SECTION 3: TABLES         /\
       * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
@@ -1010,3 +1228,722 @@
                MOVE A2-COEFF TO L-A2(LUT-IDX)
            END-PERFORM.
            DISPLAY "Filter LUT Ready.".
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+      * /\                                              /\
+      * /\   SECTION 4: JD800-STYLE LFO ENGINE        /\
+      * /\   LFO1 and LFO2 - Full feature set:        /\
+      * /\   Rate / Delay / Fade / Waveform / Offset  /\
+      * /\   Key Trig / TVA / TVF / Pitch modulation  /\
+      * /\   LFO1 can FM-modulate LFO2 rate (extra)   /\
+      * /\                                              /\
+      * /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+
+      * ==========================================
+      * GET-LFO-SETTINGS  (HARDCODED VERSION)
+      * All values are MOVE statements. Each is tagged with a
+      * USER_INPUT comment identifying the parameter for easy editing.
+      *
+      * WAVEFORM KEY:
+      *   1=Sine  2=Triangle  3=Saw-Up  4=Saw-Down
+      *   5=Square  6=Sample+Hold  7=Smooth-Random
+      *   8=User RAW (loaded from LFO-Wave.raw)
+      *
+      * RATE: oscillation speed in Hz (0=off, 10=10Hz).
+      * DELAY-SEC: seconds of silence before LFO onset.
+      * FADE-SEC: +N=fade-in N sec, -N=fade-out N sec, 0=none.
+      * OFFSET: DC shift of waveform center (-100..+100).
+      * KEY-TRIG: 1=reset phase each note, 0=free-running.
+      * TVA-DEPTH: amplitude mod depth (-100..+100).
+      * TVF-DEPTH: cutoff mod depth (-100..+100, knob units).
+      * PTCH-DEPTH: vibrato depth (-120..+120, 10=1 semitone).
+      * PHASE-OFFS: starting phase in degrees (0-359).
+      * FM-DEPTH: LFO1->LFO2 rate FM depth (-100..+100).
+      * ==========================================
+       GET-LFO-SETTINGS.
+      * --- LFO 1 ---
+      * USER_INPUT: LFO1-WAVEFORM
+           MOVE 1 TO LFO1-WAVEFORM.
+      * USER_INPUT: LFO1-RATE-HZ
+           MOVE 5 TO LFO1-RATE-HZ.
+      * USER_INPUT: LFO1-DELAY-SEC
+           MOVE 0 TO LFO1-DELAY-SEC.
+      * USER_INPUT: LFO1-FADE-SEC
+           MOVE 0 TO LFO1-FADE-SEC.
+      * USER_INPUT: LFO1-OFFSET
+           MOVE 0 TO LFO1-OFFSET.
+      * USER_INPUT: LFO1-KEY-TRIG
+           MOVE 1 TO LFO1-KEY-TRIG.
+      * USER_INPUT: LFO1-TVA-DEPTH
+           MOVE 0 TO LFO1-TVA-DEPTH.
+      * USER_INPUT: LFO1-TVF-DEPTH
+           MOVE 0 TO LFO1-TVF-DEPTH.
+      * USER_INPUT: LFO1-PTCH-DEPTH
+           MOVE 0 TO LFO1-PTCH-DPTH.
+      * USER_INPUT: LFO1-PHASE-OFFS
+           MOVE 0 TO LFO1-PHASE-OFFS.
+      * USER_INPUT: LFO1-FM-DEPTH (modulates LFO2 rate)
+           MOVE 0 TO LFO1-FM-DEPTH.
+      * --- LFO 2 ---
+      * USER_INPUT: LFO2-WAVEFORM
+           MOVE 1 TO LFO2-WAVEFORM.
+      * USER_INPUT: LFO2-RATE-HZ
+           MOVE 0 TO LFO2-RATE-HZ.
+      * USER_INPUT: LFO2-DELAY-SEC
+           MOVE 0 TO LFO2-DELAY-SEC.
+      * USER_INPUT: LFO2-FADE-SEC
+           MOVE 0 TO LFO2-FADE-SEC.
+      * USER_INPUT: LFO2-OFFSET
+           MOVE 0 TO LFO2-OFFSET.
+      * USER_INPUT: LFO2-KEY-TRIG
+           MOVE 1 TO LFO2-KEY-TRIG.
+      * USER_INPUT: LFO2-TVA-DEPTH
+           MOVE 0 TO LFO2-TVA-DEPTH.
+      * USER_INPUT: LFO2-TVF-DEPTH
+           MOVE 0 TO LFO2-TVF-DEPTH.
+      * USER_INPUT: LFO2-PTCH-DEPTH
+           MOVE 0 TO LFO2-PTCH-DPTH.
+      * USER_INPUT: LFO2-PHASE-OFFS
+           MOVE 0 TO LFO2-PHASE-OFFS.
+
+      * ==========================================
+      * INIT-LFO-WAVEFORMS
+      * Top-level controller. Dispatches to waveform builders,
+      * then pre-computes runtime state for both LFOs.
+      * ==========================================
+       INIT-LFO-WAVEFORMS.
+           PERFORM INIT-LFO1-TABLE.
+           PERFORM INIT-LFO2-TABLE.
+           PERFORM INIT-LFO1-STATE.
+           PERFORM INIT-LFO2-STATE.
+
+       INIT-LFO1-TABLE.
+           EVALUATE LFO1-WAVEFORM
+               WHEN 1 PERFORM GEN-SINE-TO-LFO1
+               WHEN 2 PERFORM GEN-TRI-TO-LFO1
+               WHEN 3 PERFORM GEN-SAW-UP-TO-LFO1
+               WHEN 4 PERFORM GEN-SAW-DN-TO-LFO1
+               WHEN 5 PERFORM GEN-SQUARE-TO-LFO1
+               WHEN 6 PERFORM GEN-SH-TO-LFO1
+               WHEN 7 PERFORM GEN-SMTH-RND-TO-LFO1
+               WHEN 8 PERFORM LOAD-LFO-RAW-TO-LFO1
+               WHEN OTHER PERFORM GEN-SINE-TO-LFO1
+           END-EVALUATE.
+
+       INIT-LFO2-TABLE.
+           EVALUATE LFO2-WAVEFORM
+               WHEN 1 PERFORM GEN-SINE-TO-LFO2
+               WHEN 2 PERFORM GEN-TRI-TO-LFO2
+               WHEN 3 PERFORM GEN-SAW-UP-TO-LFO2
+               WHEN 4 PERFORM GEN-SAW-DN-TO-LFO2
+               WHEN 5 PERFORM GEN-SQUARE-TO-LFO2
+               WHEN 6 PERFORM GEN-SH-TO-LFO2
+               WHEN 7 PERFORM GEN-SMTH-RND-TO-LFO2
+               WHEN 8 PERFORM LOAD-LFO-RAW-TO-LFO2
+               WHEN OTHER PERFORM GEN-SINE-TO-LFO2
+           END-EVALUATE.
+
+      * ==========================================
+      * INIT-LFO1-STATE
+      * Pre-computes STEP (wavetable index advance per sample),
+      * converts DELAY-SEC and FADE-SEC to sample counts, and
+      * seeds the initial phase from PHASE-OFFS degrees.
+      * ==========================================
+       INIT-LFO1-STATE.
+           IF LFO1-RATE-HZ = 0
+               MOVE 0 TO LFO1-STEP
+           ELSE
+               COMPUTE LFO1-STEP =
+                   2048.0 * LFO1-RATE-HZ / SAMPLE-RATE
+           END-IF.
+           COMPUTE LFO1-DELAY-SMPL =
+               LFO1-DELAY-SEC * SAMPLE-RATE.
+           MOVE LFO1-DELAY-SMPL TO LFO1-DELAY-CNT.
+           EVALUATE TRUE
+               WHEN LFO1-FADE-SEC = 0
+                   MOVE 1.0 TO LFO1-FADE-AMT
+                   MOVE 0   TO LFO1-FADE-TOTAL
+                   MOVE 0   TO LFO1-FADE-STEP
+               WHEN LFO1-FADE-SEC > 0
+      * Positive: fade in - amplitude starts at 0, ramps to 1
+                   MOVE 0.0 TO LFO1-FADE-AMT
+                   COMPUTE LFO1-FADE-TOTAL =
+                       LFO1-FADE-SEC * SAMPLE-RATE
+                   COMPUTE LFO1-FADE-STEP =
+                       1.0 / LFO1-FADE-TOTAL
+               WHEN OTHER
+      * Negative: fade out - amplitude starts at 1, ramps to 0
+                   MOVE 1.0 TO LFO1-FADE-AMT
+                   COMPUTE LFO1-FADE-TOTAL =
+                       FUNCTION ABS(LFO1-FADE-SEC) * SAMPLE-RATE
+                   COMPUTE LFO1-FADE-STEP =
+                       -1.0 / LFO1-FADE-TOTAL
+           END-EVALUATE.
+           MOVE 0 TO LFO1-FADE-CNT.
+           IF LFO1-PHASE-OFFS > 0
+               COMPUTE LFO1-PHASE =
+                   (LFO1-PHASE-OFFS / 360.0) * 2048.0
+           ELSE
+               MOVE 0 TO LFO1-PHASE
+           END-IF.
+           MOVE 0 TO LFO1-IS-ACTIVE.
+           MOVE 0 TO LFO1-SH-HELD.
+           IF LFO1-STEP > 0
+               COMPUTE LFO1-SH-PERIOD =
+                   FUNCTION INTEGER(2048.0 / LFO1-STEP)
+               IF LFO1-SH-PERIOD < 1
+                   MOVE 1 TO LFO1-SH-PERIOD
+               END-IF
+           ELSE
+               MOVE 9999999 TO LFO1-SH-PERIOD
+           END-IF.
+           MOVE 0 TO LFO1-SH-CNT.
+           MOVE 0 TO LFO1-PREV-IDX.
+
+       INIT-LFO2-STATE.
+           IF LFO2-RATE-HZ = 0
+               MOVE 0 TO LFO2-STEP
+           ELSE
+               COMPUTE LFO2-STEP =
+                   2048.0 * LFO2-RATE-HZ / SAMPLE-RATE
+           END-IF.
+           COMPUTE LFO2-DELAY-SMPL =
+               LFO2-DELAY-SEC * SAMPLE-RATE.
+           MOVE LFO2-DELAY-SMPL TO LFO2-DELAY-CNT.
+           EVALUATE TRUE
+               WHEN LFO2-FADE-SEC = 0
+                   MOVE 1.0 TO LFO2-FADE-AMT
+                   MOVE 0   TO LFO2-FADE-TOTAL
+                   MOVE 0   TO LFO2-FADE-STEP
+               WHEN LFO2-FADE-SEC > 0
+                   MOVE 0.0 TO LFO2-FADE-AMT
+                   COMPUTE LFO2-FADE-TOTAL =
+                       LFO2-FADE-SEC * SAMPLE-RATE
+                   COMPUTE LFO2-FADE-STEP =
+                       1.0 / LFO2-FADE-TOTAL
+               WHEN OTHER
+                   MOVE 1.0 TO LFO2-FADE-AMT
+                   COMPUTE LFO2-FADE-TOTAL =
+                       FUNCTION ABS(LFO2-FADE-SEC) * SAMPLE-RATE
+                   COMPUTE LFO2-FADE-STEP =
+                       -1.0 / LFO2-FADE-TOTAL
+           END-EVALUATE.
+           MOVE 0 TO LFO2-FADE-CNT.
+           IF LFO2-PHASE-OFFS > 0
+               COMPUTE LFO2-PHASE =
+                   (LFO2-PHASE-OFFS / 360.0) * 2048.0
+           ELSE
+               MOVE 0 TO LFO2-PHASE
+           END-IF.
+           MOVE 0 TO LFO2-IS-ACTIVE.
+           MOVE 0 TO LFO2-SH-HELD.
+           IF LFO2-STEP > 0
+               COMPUTE LFO2-SH-PERIOD =
+                   FUNCTION INTEGER(2048.0 / LFO2-STEP)
+               IF LFO2-SH-PERIOD < 1
+                   MOVE 1 TO LFO2-SH-PERIOD
+               END-IF
+           ELSE
+               MOVE 9999999 TO LFO2-SH-PERIOD
+           END-IF.
+           MOVE 0 TO LFO2-SH-CNT.
+           MOVE 0 TO LFO2-PREV-IDX.
+
+      * ==========================================
+      * ADVANCE-LFO-ENGINES
+      * Called once per sample. Drives both oscillators forward,
+      * then combines their outputs into TVA/TVF/Pitch mod signals.
+      * LFO1 FM: LFO1-VALUE scales LFO2 step when FM-DEPTH <> 0.
+      * ==========================================
+       ADVANCE-LFO-ENGINES.
+           PERFORM ADVANCE-LFO1.
+           PERFORM ADVANCE-LFO2.
+           COMPUTE LFO-TVA-OUT =
+               (LFO1-VALUE * LFO1-TVA-DEPTH / 100.0) +
+               (LFO2-VALUE * LFO2-TVA-DEPTH / 100.0).
+           COMPUTE LFO-TVF-OUT =
+               (LFO1-VALUE * LFO1-TVF-DEPTH) +
+               (LFO2-VALUE * LFO2-TVF-DEPTH).
+           COMPUTE LFO-PTCH-OUT =
+               (LFO1-VALUE * LFO1-PTCH-DPTH / 10.0) +
+               (LFO2-VALUE * LFO2-PTCH-DPTH / 10.0).
+
+      * ==========================================
+      * ADVANCE-LFO1
+      * Core per-sample oscillator tick for LFO1.
+      * Sequence: delay -> fade -> phase advance -> table lookup
+      *           -> DC offset -> fade multiply -> output.
+      * S+H mode holds a random value for SH-PERIOD samples then
+      * re-samples. All other modes use linear interpolation.
+      * ==========================================
+       ADVANCE-LFO1.
+           IF LFO1-STEP = 0
+               MOVE 0 TO LFO1-VALUE
+               EXIT PARAGRAPH
+           END-IF.
+      * 1. Delay: suppress output until delay counter expires
+           IF LFO1-DELAY-CNT > 0
+               SUBTRACT 1 FROM LFO1-DELAY-CNT
+               MOVE 0 TO LFO1-VALUE
+               EXIT PARAGRAPH
+           END-IF.
+           MOVE 1 TO LFO1-IS-ACTIVE.
+      * 2. Advance fade envelope
+           IF LFO1-FADE-TOTAL > 0 AND
+              LFO1-FADE-CNT < LFO1-FADE-TOTAL
+               ADD 1 TO LFO1-FADE-CNT
+               ADD LFO1-FADE-STEP TO LFO1-FADE-AMT
+               IF LFO1-FADE-AMT > 1.0
+                   MOVE 1.0 TO LFO1-FADE-AMT
+               END-IF
+               IF LFO1-FADE-AMT < 0.0
+                   MOVE 0.0 TO LFO1-FADE-AMT
+               END-IF
+           END-IF.
+      * 3. Advance phase, wrap within 0..2047
+           ADD LFO1-STEP TO LFO1-PHASE.
+           PERFORM UNTIL LFO1-PHASE < 2048.0
+               SUBTRACT 2048.0 FROM LFO1-PHASE
+           END-PERFORM.
+      * 4a. S+H mode: hold last value until period elapses
+           IF LFO1-SH
+               ADD 1 TO LFO1-SH-CNT
+               IF LFO1-SH-CNT >= LFO1-SH-PERIOD
+                   MOVE 0 TO LFO1-SH-CNT
+                   PERFORM GEN-LFO-RANDOM
+                   COMPUTE LFO1-SH-HELD =
+                       (LFO-RND-RESULT * 2.0) - 1.0
+               END-IF
+               COMPUTE LFO-WORK-VAL = LFO1-SH-HELD
+           ELSE
+      * 4b. All other modes: interpolated table lookup
+               COMPUTE LFO-CALC-IDX =
+                   FUNCTION INTEGER(LFO1-PHASE) + 1
+               IF LFO-CALC-IDX < 1
+                   MOVE 1 TO LFO-CALC-IDX
+               END-IF
+               IF LFO-CALC-IDX > 2048
+                   MOVE 2048 TO LFO-CALC-IDX
+               END-IF
+               COMPUTE LFO-NEXT-IDX = LFO-CALC-IDX + 1
+               IF LFO-NEXT-IDX > 2048
+                   MOVE 1 TO LFO-NEXT-IDX
+               END-IF
+               COMPUTE LFO-FRAC =
+                   LFO1-PHASE - (LFO-CALC-IDX - 1)
+               MOVE LFO1-TBL-SAMP(LFO-CALC-IDX) TO LFO-SAMP-A
+               MOVE LFO1-TBL-SAMP(LFO-NEXT-IDX) TO LFO-SAMP-B
+               COMPUTE LFO-WORK-VAL = LFO-SAMP-A +
+                   (LFO-FRAC * (LFO-SAMP-B - LFO-SAMP-A))
+           END-IF.
+      * 5. Apply DC offset (-100..+100 / 100 = +/-1.0)
+           IF LFO1-OFFSET NOT = 0
+               COMPUTE LFO-WORK-VAL =
+                   LFO-WORK-VAL + (LFO1-OFFSET / 100.0)
+           END-IF.
+           IF LFO-WORK-VAL >  1.0 MOVE  1.0 TO LFO-WORK-VAL END-IF.
+           IF LFO-WORK-VAL < -1.0 MOVE -1.0 TO LFO-WORK-VAL END-IF.
+      * 6. Apply fade multiplier
+           COMPUTE LFO1-VALUE = LFO-WORK-VAL * LFO1-FADE-AMT.
+
+      * ==========================================
+      * ADVANCE-LFO2
+      * Identical to ADVANCE-LFO1 except LFO2 state is used
+      * and FM modulation from LFO1 is applied to the step size.
+      * FM formula: effective_step = LFO2-STEP * (1 + FM_depth%)
+      * This produces frequency modulation of LFO2's rate by LFO1.
+      * ==========================================
+       ADVANCE-LFO2.
+           IF LFO2-STEP = 0
+               MOVE 0 TO LFO2-VALUE
+               EXIT PARAGRAPH
+           END-IF.
+           IF LFO2-DELAY-CNT > 0
+               SUBTRACT 1 FROM LFO2-DELAY-CNT
+               MOVE 0 TO LFO2-VALUE
+               EXIT PARAGRAPH
+           END-IF.
+           MOVE 1 TO LFO2-IS-ACTIVE.
+           IF LFO2-FADE-TOTAL > 0 AND
+              LFO2-FADE-CNT < LFO2-FADE-TOTAL
+               ADD 1 TO LFO2-FADE-CNT
+               ADD LFO2-FADE-STEP TO LFO2-FADE-AMT
+               IF LFO2-FADE-AMT > 1.0
+                   MOVE 1.0 TO LFO2-FADE-AMT
+               END-IF
+               IF LFO2-FADE-AMT < 0.0
+                   MOVE 0.0 TO LFO2-FADE-AMT
+               END-IF
+           END-IF.
+      * FM modulation: LFO1 output scales LFO2 step
+           IF LFO1-FM-DEPTH NOT = 0
+               COMPUTE LFO-MOD-RATE =
+                   LFO1-VALUE * LFO1-FM-DEPTH / 100.0
+               COMPUTE LFO-CALC-STEP =
+                   LFO2-STEP * (1.0 + LFO-MOD-RATE)
+               IF LFO-CALC-STEP < 0
+                   MOVE 0 TO LFO-CALC-STEP
+               END-IF
+           ELSE
+               MOVE LFO2-STEP TO LFO-CALC-STEP
+           END-IF.
+           ADD LFO-CALC-STEP TO LFO2-PHASE.
+           PERFORM UNTIL LFO2-PHASE < 2048.0
+               SUBTRACT 2048.0 FROM LFO2-PHASE
+           END-PERFORM.
+           IF LFO2-SH
+               ADD 1 TO LFO2-SH-CNT
+               IF LFO2-SH-CNT >= LFO2-SH-PERIOD
+                   MOVE 0 TO LFO2-SH-CNT
+                   PERFORM GEN-LFO-RANDOM
+                   COMPUTE LFO2-SH-HELD =
+                       (LFO-RND-RESULT * 2.0) - 1.0
+               END-IF
+               COMPUTE LFO-WORK-VAL = LFO2-SH-HELD
+           ELSE
+               COMPUTE LFO-CALC-IDX =
+                   FUNCTION INTEGER(LFO2-PHASE) + 1
+               IF LFO-CALC-IDX < 1
+                   MOVE 1 TO LFO-CALC-IDX
+               END-IF
+               IF LFO-CALC-IDX > 2048
+                   MOVE 2048 TO LFO-CALC-IDX
+               END-IF
+               COMPUTE LFO-NEXT-IDX = LFO-CALC-IDX + 1
+               IF LFO-NEXT-IDX > 2048
+                   MOVE 1 TO LFO-NEXT-IDX
+               END-IF
+               COMPUTE LFO-FRAC =
+                   LFO2-PHASE - (LFO-CALC-IDX - 1)
+               MOVE LFO2-TBL-SAMP(LFO-CALC-IDX) TO LFO-SAMP-A
+               MOVE LFO2-TBL-SAMP(LFO-NEXT-IDX) TO LFO-SAMP-B
+               COMPUTE LFO-WORK-VAL = LFO-SAMP-A +
+                   (LFO-FRAC * (LFO-SAMP-B - LFO-SAMP-A))
+           END-IF.
+           IF LFO2-OFFSET NOT = 0
+               COMPUTE LFO-WORK-VAL =
+                   LFO-WORK-VAL + (LFO2-OFFSET / 100.0)
+           END-IF.
+           IF LFO-WORK-VAL >  1.0 MOVE  1.0 TO LFO-WORK-VAL END-IF.
+           IF LFO-WORK-VAL < -1.0 MOVE -1.0 TO LFO-WORK-VAL END-IF.
+           COMPUTE LFO2-VALUE = LFO-WORK-VAL * LFO2-FADE-AMT.
+
+      * ==========================================
+      * APPLY-LFO-TVF
+      * Adds the combined LFO TVF output to CURRENT-KNOB.
+      * RECALCULATE-COEFFICIENTS clamps DEPTH-CALC to 0-100 after
+      * applying TVF-DEPTH scaling, so no extra clamping needed here.
+      * ==========================================
+       APPLY-LFO-TVF.
+           IF LFO-TVF-OUT NOT = 0
+               ADD LFO-TVF-OUT TO CURRENT-KNOB
+           END-IF.
+
+      * ==========================================
+      * APPLY-LFO-TVA
+      * Scales INTERP-RESULT by (1 + LFO-TVA-OUT) for tremolo.
+      * LFO-TVA-OUT = 0.0 leaves the signal unchanged.
+      * Result is clamped to -1.0..+1.0 before volume write.
+      * ==========================================
+       APPLY-LFO-TVA.
+           IF LFO-TVA-OUT NOT = 0
+               COMPUTE INTERP-RESULT =
+                   INTERP-RESULT * (1.0 + LFO-TVA-OUT)
+               IF INTERP-RESULT >  1.0
+                   MOVE  1.0 TO INTERP-RESULT
+               END-IF
+               IF INTERP-RESULT < -1.0
+                   MOVE -1.0 TO INTERP-RESULT
+               END-IF
+           END-IF.
+
+      * ==========================================
+      * APPLY-LFO-PITCH
+      * Adds a fractional offset to READ-POSITION to produce vibrato.
+      * Semitone ratio approximation: 2^(1/12)-1 = 0.059463094.
+      * LFO-PTCH-OUT is in semitones (1.0 = 1 semitone).
+      * Called after CALCULATE-INDICES so READ-INDEX is already set.
+      * ==========================================
+       APPLY-LFO-PITCH.
+           IF LFO-PTCH-OUT NOT = 0
+               COMPUTE LFO-PTCH-ADJ =
+                   STEP-SIZE * LFO-PTCH-OUT * 0.05946309
+               ADD LFO-PTCH-ADJ TO READ-POSITION
+           END-IF.
+
+      * ==========================================
+      * WAVEFORM GENERATORS - LFO1
+      * Fill the 2048-entry LFO1-WAVE-TABLE with values -1.0..+1.0.
+      * ==========================================
+
+      * --- SINE: Uses FUNCTION SIN for maximum accuracy ---
+       GEN-SINE-TO-LFO1.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               COMPUTE LFO-BUILD-ANG =
+                   LFO-2PI * (LFO-BUILD-IDX - 1) / 2048
+               COMPUTE LFO1-TBL-SAMP(LFO-BUILD-IDX) =
+                   FUNCTION SIN(LFO-BUILD-ANG)
+           END-PERFORM.
+
+      * --- TRIANGLE: ramp 0->+1->-1->0 over 2048 entries ---
+       GEN-TRI-TO-LFO1.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               COMPUTE LFO-BUILD-ANG =
+                   (LFO-BUILD-IDX - 1) / 2048.0
+               EVALUATE TRUE
+                 WHEN LFO-BUILD-ANG < 0.25
+                   COMPUTE LFO1-TBL-SAMP(LFO-BUILD-IDX) =
+                       LFO-BUILD-ANG * 4.0
+                 WHEN LFO-BUILD-ANG < 0.75
+                   COMPUTE LFO1-TBL-SAMP(LFO-BUILD-IDX) =
+                       2.0 - (LFO-BUILD-ANG * 4.0)
+                 WHEN OTHER
+                   COMPUTE LFO1-TBL-SAMP(LFO-BUILD-IDX) =
+                       (LFO-BUILD-ANG * 4.0) - 4.0
+               END-EVALUATE
+           END-PERFORM.
+
+      * --- SAW UP: linear ramp from -1.0 to +1.0 ---
+       GEN-SAW-UP-TO-LFO1.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               COMPUTE LFO1-TBL-SAMP(LFO-BUILD-IDX) =
+                   ((LFO-BUILD-IDX - 1) / 1024.0) - 1.0
+           END-PERFORM.
+
+      * --- SAW DOWN: linear ramp from +1.0 to -1.0 ---
+       GEN-SAW-DN-TO-LFO1.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               COMPUTE LFO1-TBL-SAMP(LFO-BUILD-IDX) =
+                   1.0 - ((LFO-BUILD-IDX - 1) / 1024.0)
+           END-PERFORM.
+
+      * --- SQUARE: first 1024 entries = +1.0, rest = -1.0 ---
+       GEN-SQUARE-TO-LFO1.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               IF LFO-BUILD-IDX <= 1024
+                   MOVE 1.0 TO LFO1-TBL-SAMP(LFO-BUILD-IDX)
+               ELSE
+                   MOVE -1.0 TO LFO1-TBL-SAMP(LFO-BUILD-IDX)
+               END-IF
+           END-PERFORM.
+
+      * --- S+H: 16 random steps each 128 entries wide ---
+      * Table is pre-populated; ADVANCE-LFO1 still uses SH-PERIOD
+      * logic for real-time random capture in the sample loop.
+       GEN-SH-TO-LFO1.
+           MOVE 0 TO LFO-WORK-VAL.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               IF FUNCTION MOD(LFO-BUILD-IDX - 1, 128) = 0
+                   PERFORM GEN-LFO-RANDOM
+                   COMPUTE LFO-WORK-VAL =
+                       (LFO-RND-RESULT * 2.0) - 1.0
+               END-IF
+               MOVE LFO-WORK-VAL TO LFO1-TBL-SAMP(LFO-BUILD-IDX)
+           END-PERFORM.
+
+      * --- SMOOTH RANDOM: linearly interpolated random steps ---
+      * 16 random target values, each blended over 128 entries.
+       GEN-SMTH-RND-TO-LFO1.
+           MOVE 0 TO LFO-SAMP-A.
+           PERFORM GEN-LFO-RANDOM.
+           COMPUTE LFO-SAMP-B = (LFO-RND-RESULT * 2.0) - 1.0.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               COMPUTE LFO-FRAC =
+                   FUNCTION MOD(LFO-BUILD-IDX - 1, 128) / 128.0
+               IF FUNCTION MOD(LFO-BUILD-IDX - 1, 128) = 0 AND
+                  LFO-BUILD-IDX > 1
+                   MOVE LFO-SAMP-B TO LFO-SAMP-A
+                   PERFORM GEN-LFO-RANDOM
+                   COMPUTE LFO-SAMP-B =
+                       (LFO-RND-RESULT * 2.0) - 1.0
+               END-IF
+               COMPUTE LFO1-TBL-SAMP(LFO-BUILD-IDX) =
+                   LFO-SAMP-A +
+                   (LFO-FRAC * (LFO-SAMP-B - LFO-SAMP-A))
+           END-PERFORM.
+
+      * --- USER RAW: load signed 16-bit PCM from LFO-Wave.raw ---
+      * Reads 2048 samples (4096 bytes) little-endian.
+      * Entries beyond end-of-file are zeroed.
+       LOAD-LFO-RAW-TO-LFO1.
+           OPEN INPUT LFO-FILE.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               MOVE 0 TO LFO1-TBL-SAMP(LFO-BUILD-IDX)
+               READ LFO-FILE INTO LFO-FILE-BUF(1:1)
+                   AT END EXIT PERFORM
+                   NOT AT END
+                       READ LFO-FILE INTO LFO-FILE-BUF(2:1)
+                           AT END EXIT PERFORM
+                           NOT AT END
+                               COMPUTE LFO-FILE-W1 =
+                                 FUNCTION ORD
+                                 (LFO-FILE-BUF(1:1)) - 1
+                               COMPUTE LFO-FILE-W2 =
+                                 FUNCTION ORD
+                                 (LFO-FILE-BUF(2:1)) - 1
+                               COMPUTE LFO-FILE-W1 =
+                                 LFO-FILE-W1 +
+                                 (LFO-FILE-W2 * 256)
+                               IF LFO-FILE-W1 > 32767
+                                   SUBTRACT 65536
+                                       FROM LFO-FILE-W1
+                               END-IF
+                               COMPUTE LFO1-TBL-SAMP
+                                 (LFO-BUILD-IDX) =
+                                 LFO-FILE-W1 / 32768.0
+                       END-READ
+               END-READ
+           END-PERFORM.
+           CLOSE LFO-FILE.
+
+      * ==========================================
+      * WAVEFORM GENERATORS - LFO2
+      * Mirror of LFO1 generators writing into LFO2-WAVE-TABLE.
+      * USER RAW copies from LFO1 table if LFO1 also used type 8,
+      * otherwise re-reads LFO-Wave.raw directly.
+      * ==========================================
+
+       GEN-SINE-TO-LFO2.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               COMPUTE LFO-BUILD-ANG =
+                   LFO-2PI * (LFO-BUILD-IDX - 1) / 2048
+               COMPUTE LFO2-TBL-SAMP(LFO-BUILD-IDX) =
+                   FUNCTION SIN(LFO-BUILD-ANG)
+           END-PERFORM.
+
+       GEN-TRI-TO-LFO2.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               COMPUTE LFO-BUILD-ANG =
+                   (LFO-BUILD-IDX - 1) / 2048.0
+               EVALUATE TRUE
+                 WHEN LFO-BUILD-ANG < 0.25
+                   COMPUTE LFO2-TBL-SAMP(LFO-BUILD-IDX) =
+                       LFO-BUILD-ANG * 4.0
+                 WHEN LFO-BUILD-ANG < 0.75
+                   COMPUTE LFO2-TBL-SAMP(LFO-BUILD-IDX) =
+                       2.0 - (LFO-BUILD-ANG * 4.0)
+                 WHEN OTHER
+                   COMPUTE LFO2-TBL-SAMP(LFO-BUILD-IDX) =
+                       (LFO-BUILD-ANG * 4.0) - 4.0
+               END-EVALUATE
+           END-PERFORM.
+
+       GEN-SAW-UP-TO-LFO2.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               COMPUTE LFO2-TBL-SAMP(LFO-BUILD-IDX) =
+                   ((LFO-BUILD-IDX - 1) / 1024.0) - 1.0
+           END-PERFORM.
+
+       GEN-SAW-DN-TO-LFO2.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               COMPUTE LFO2-TBL-SAMP(LFO-BUILD-IDX) =
+                   1.0 - ((LFO-BUILD-IDX - 1) / 1024.0)
+           END-PERFORM.
+
+       GEN-SQUARE-TO-LFO2.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               IF LFO-BUILD-IDX <= 1024
+                   MOVE 1.0 TO LFO2-TBL-SAMP(LFO-BUILD-IDX)
+               ELSE
+                   MOVE -1.0 TO LFO2-TBL-SAMP(LFO-BUILD-IDX)
+               END-IF
+           END-PERFORM.
+
+       GEN-SH-TO-LFO2.
+           MOVE 0 TO LFO-WORK-VAL.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               IF FUNCTION MOD(LFO-BUILD-IDX - 1, 128) = 0
+                   PERFORM GEN-LFO-RANDOM
+                   COMPUTE LFO-WORK-VAL =
+                       (LFO-RND-RESULT * 2.0) - 1.0
+               END-IF
+               MOVE LFO-WORK-VAL TO LFO2-TBL-SAMP(LFO-BUILD-IDX)
+           END-PERFORM.
+
+       GEN-SMTH-RND-TO-LFO2.
+           MOVE 0 TO LFO-SAMP-A.
+           PERFORM GEN-LFO-RANDOM.
+           COMPUTE LFO-SAMP-B = (LFO-RND-RESULT * 2.0) - 1.0.
+           PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+               UNTIL LFO-BUILD-IDX > 2048
+               COMPUTE LFO-FRAC =
+                   FUNCTION MOD(LFO-BUILD-IDX - 1, 128) / 128.0
+               IF FUNCTION MOD(LFO-BUILD-IDX - 1, 128) = 0 AND
+                  LFO-BUILD-IDX > 1
+                   MOVE LFO-SAMP-B TO LFO-SAMP-A
+                   PERFORM GEN-LFO-RANDOM
+                   COMPUTE LFO-SAMP-B =
+                       (LFO-RND-RESULT * 2.0) - 1.0
+               END-IF
+               COMPUTE LFO2-TBL-SAMP(LFO-BUILD-IDX) =
+                   LFO-SAMP-A +
+                   (LFO-FRAC * (LFO-SAMP-B - LFO-SAMP-A))
+           END-PERFORM.
+
+      * LFO2 USER RAW: re-use LFO1 table if it also loaded type 8,
+      * otherwise open LFO-Wave.raw and load independently.
+       LOAD-LFO-RAW-TO-LFO2.
+           IF LFO1-USER-RAW
+               PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+                   UNTIL LFO-BUILD-IDX > 2048
+                   MOVE LFO1-TBL-SAMP(LFO-BUILD-IDX) TO
+                       LFO2-TBL-SAMP(LFO-BUILD-IDX)
+               END-PERFORM
+           ELSE
+               OPEN INPUT LFO-FILE
+               PERFORM VARYING LFO-BUILD-IDX FROM 1 BY 1
+                   UNTIL LFO-BUILD-IDX > 2048
+                   MOVE 0 TO LFO2-TBL-SAMP(LFO-BUILD-IDX)
+                   READ LFO-FILE INTO LFO-FILE-BUF(1:1)
+                       AT END EXIT PERFORM
+                       NOT AT END
+                           READ LFO-FILE INTO LFO-FILE-BUF(2:1)
+                               AT END EXIT PERFORM
+                               NOT AT END
+                                   COMPUTE LFO-FILE-W1 =
+                                     FUNCTION ORD
+                                     (LFO-FILE-BUF(1:1)) - 1
+                                   COMPUTE LFO-FILE-W2 =
+                                     FUNCTION ORD
+                                     (LFO-FILE-BUF(2:1)) - 1
+                                   COMPUTE LFO-FILE-W1 =
+                                     LFO-FILE-W1 +
+                                     (LFO-FILE-W2 * 256)
+                                   IF LFO-FILE-W1 > 32767
+                                       SUBTRACT 65536
+                                           FROM LFO-FILE-W1
+                                   END-IF
+                                   COMPUTE LFO2-TBL-SAMP
+                                     (LFO-BUILD-IDX) =
+                                     LFO-FILE-W1 / 32768.0
+                           END-READ
+                   END-READ
+               END-PERFORM
+               CLOSE LFO-FILE
+           END-IF.
+
+      * ==========================================
+      * GEN-LFO-RANDOM
+      * Park-Miller LCG. Writes a float 0.0..1.0 to LFO-RND-RESULT.
+      * Uses its own seed so it runs independently from the
+      * analogue-engine GENERATE-DRIFT Park-Miller instance.
+      * ==========================================
+       GEN-LFO-RANDOM.
+           COMPUTE LFO-RND-SEED = FUNCTION MOD(
+               (1103515245 * LFO-RND-SEED + 12345),
+               2147483647).
+           COMPUTE LFO-RND-RESULT =
+               LFO-RND-SEED / 2147483647.
