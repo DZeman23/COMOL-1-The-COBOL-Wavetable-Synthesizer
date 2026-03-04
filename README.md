@@ -32,6 +32,57 @@ A highly flexible and versatile wavetable synthesizer written entirely in COBOL.
 
 ---
 
+## Table of Contents
+
+- [What This Program Does](#what-this-program-does)
+- [Why COBOL?](#why-cobol)
+- [Special Thanks](#special-thanks)
+- [External Software](#external-software)
+- [Repository Structure](#repository-structure)
+- [What is a 16-bit Headerless PCM File?](#what-is-a-16-bit-headerless-pcm-file)
+- [Quick-Start Guide](#quick-start-guide)
+  - [1. Initial Setup](#1-initial-setup)
+  - [2. Running the Synth via AutoRun](#2-running-the-synth-via-autorun-recommended)
+  - [3. Listening to the Output in Audacity](#3-listening-to-the-output-in-audacity)
+  - [4. Exporting from Audacity](#4-exporting-from-audacity)
+- [AutoRun GUI Reference](#autorun-gui-reference)
+  - [Project Folder Setup](#project-folder-setup)
+  - [Top Bar](#top-bar)
+  - [Waveform Tabs (1–4)](#waveform-tabs-14)
+    - [Wave Source](#wave-source)
+    - [Pitch](#pitch)
+    - [Interpolation](#interpolation)
+    - [Filter](#filter)
+    - [Analogue Parameters](#analogue-parameters-active-only-when-operation-mode--2)
+    - [Volume Envelope — TVA](#volume-envelope--tva)
+    - [Filter Envelope — TVF](#filter-envelope--tvf)
+    - [LFO 1](#lfo-1)
+    - [LFO 2](#lfo-2)
+  - [Copy Parameters](#copy-parameters)
+  - [Compiler Settings](#compiler-settings)
+  - [Session Persistence](#session-persistence)
+  - [Output Files](#output-files)
+- [FX Module](#fx-module)
+  - [Running the FX Module](#running-the-fx-module)
+  - [FX-RUN.py Workflow](#fx-runpy-workflow)
+  - [FX Effects Reference](#fx-effects-reference)
+    - [Effect 1 — Spectrum (State Variable EQ)](#effect-1--spectrum-state-variable-eq)
+    - [Effect 2 — Saturator](#effect-2--saturator)
+    - [Effect 3 — Phaser](#effect-3--phaser)
+    - [Effect 4 — Chorus (Stereo)](#effect-4--chorus-stereo)
+    - [Effect 5 — Delay (Stereo Ping-Pong)](#effect-5--delay-stereo-ping-pong)
+    - [Effect 6 — Reverb (Parallel Comb Tank)](#effect-6--reverb-parallel-comb-tank)
+    - [DC Blocker (Internal)](#dc-blocker-internal)
+  - [Assembling Stereo Output in Audacity](#assembling-stereo-output-in-audacity)
+- [Making Your Own Waveforms](#making-your-own-waveforms)
+  - [Method 1: Recording or Sampling](#method-1-recording-or-sampling-recommended)
+  - [Method 2: Drawing Waveforms](#method-2-drawing-waveforms)
+  - [Tips](#tips)
+- [Interpolation Sequencer](#interpolation-sequencer)
+- [To Do](#to-do)
+
+---
+
 ## What This Program Does
 
 1. Generates or loads waveforms into a wavetable
@@ -80,17 +131,23 @@ These are for mapping the output to a keyboard.
 
 ```
 COMOL-1-The-COBOL-Wavetable-Synthesizer/
-├── CML1_Harcode.cbl          ← main COBOL synth template (for manual use)
-├── [copybooks].CPY
+├── COMOL-1.2.cbl             ← stable release (manual use)
+├── COMOL-1.3.cbl             ← current release (manual use)
+├── 1.3-Change-log.md
+├── Full Documentation.md
+├── LICENSE
+├── Copybooks/                ← .CPY copybook files
 ├── AutoRun/
 │   ├── AutomatedRun.py       ← Python GUI for batch voice generation
-│   └── CML1_Harcode.cbl      ← use THIS version with AutoRun (not the root one)
-└── FX-Module/
-    ├── COMOLFX.cbl           ← stereo FX chain processor
-    └── FX-RUN.py             ← Python GUI for FX parameters
+│   └── CML1_Harcode.cbl      ← use THIS version with AutoRun (not the root ones)
+├── FX-Module/
+│   ├── COMOLFX.cbl           ← stereo FX chain processor
+│   └── FX-RUN.py             ← Python GUI for FX parameters
+├── Presets/                  ← preset patch instructions
+└── Sample-Bank/              ← included wavetable samples
 ```
 
-> **Important:** The AutoRun folder contains its own copy of the COBOL source file. Always use that version with `AutomatedRun.py`. Using the root-level file will cause the Python script to break.
+> **Important:** The AutoRun folder contains its own copy of the COBOL source file. Always use that version with `AutomatedRun.py`. Using either of the root-level `.cbl` files will cause the Python script to break.
 
 ---
 
@@ -170,60 +227,126 @@ In **Compiler Settings**, set **Cob copy dir** to the absolute path of the `Auto
 
 Each tab is one independent voice. Any field left blank keeps the default value already in the template. A tab is skipped entirely if `OUT_FILE_PATH` is blank.
 
+---
+
 #### Wave Source
+
 | Parameter | Description |
 |---|---|
-| `WAVE-SOURCE-CHOICE` | `1` = generate internal sine wave, `2` = load from `.raw` file |
-| `IN_FILE_PATH` | Path to the input `.raw` file (only used when `WAVE-SOURCE-CHOICE = 2`) |
+| `WAVE-SOURCE-CHOICE` | `1` = generate internal sine wave, `2` = load wavetable from `.raw` file |
+| `IN_FILE_PATH` | Path to input `.raw` wavetable (only used when `WAVE-SOURCE-CHOICE = 2`) |
 | `OUT_FILE_PATH` | Path for the output `.raw` file **(required)** |
 
+---
+
 #### Pitch
-| Parameter | Description |
-|---|---|
-| `USER-OCTAVE` | Octave `0–6` |
-| `USER-NOTE` | Note `0–11` (0=C, 1=C#, 2=D, 3=D#, 4=E, 5=F, 6=F#, 7=G, 8=G#, 9=A, 10=A#, 11=B) |
+
+| Parameter | Range | Description |
+|---|---|---|
+| `USER-OCTAVE` | `0–6` | Octave |
+| `USER-NOTE` | `0–11` | `0`=C, `1`=C#, `2`=D, `3`=D#, `4`=E, `5`=F, `6`=F#, `7`=G, `8`=G#, `9`=A, `10`=A#, `11`=B |
+
+---
 
 #### Interpolation
-| Parameter | Description |
-|---|---|
-| `RAW-PATTERN-INPUT` | String of digits defining the interpolation sequence. `1` = nearest neighbour (raw/aliased), `2` = linear (smooth), `3` = sinc (highest quality). Example: `"3331"` cycles sinc×3 then raw. The pattern repeats throughout playback. Defaults to `2` (linear) if left blank. Maximum 16 characters. |
+
+| Parameter | Range | Description |
+|---|---|---|
+| `RAW-PATTERN-INPUT` | Up to 16 digits | Per-sample interpolation sequence. `1` = Nearest Neighbour, `2` = Linear, `3` = Sinc. Pattern repeats cyclically. Defaults to `2` if blank |
+
+**Examples:** `2222` = pure linear; `3331` = mostly sinc with occasional aliasing; `1212` = alternates raw and smooth every sample; `321` = cycles all three methods.
+
+---
 
 #### Filter
-| Parameter | Description |
-|---|---|
-| `OPERATION-MODE` | `1` = Digital (clean), `2` = Analogue (adds drift, drive, bias) |
-| `FILTER-TYPE-CHOICE` | `1` = Low Pass, `2` = High Pass, `3` = Band Pass |
-| `KNOB-POSITION` | Filter cutoff `0–100` |
-| `Q-KNOB-POSITION` | Filter resonance `0–100` |
+
+| Parameter | Range | Description |
+|---|---|---|
+| `OPERATION-MODE` | `1` or `2` | `1` = Digital (clean biquad), `2` = Analogue (adds bias, saturation, and drift) |
+| `FILTER-TYPE-CHOICE` | `1–3` | `1` = Low Pass, `2` = High Pass, `3` = Band Pass |
+| `KNOB-POSITION` | `0–100` | Filter cutoff. Static base value; TVF envelope and LFO modulation apply offsets relative to this |
+| `Q-KNOB-POSITION` | `0–100` | Filter resonance |
+
+---
 
 #### Analogue Parameters *(active only when `OPERATION-MODE = 2`)*
-| Parameter | Description |
-|---|---|
-| `BIAS-INTENSITY` | Asymmetric clipping intensity `0–100` |
-| `USER-DRIVE-IN` | Soft saturation drive `1–10` |
-| `USER-DRIFT-IN` | Random pitch/amplitude drift `0–100` |
-| `USER-CRUSH-IN` | Bit crush factor `1–2000` |
 
-#### Volume Envelope (JD800-style 5-stage TVA)
-| Parameter | Description |
-|---|---|
-| `T1` / `L1` | Attack time (seconds) / Attack peak level `0–100` |
-| `T2` / `L2` | Decay 1 time / Break level `0–100` |
-| `T3` / `L3` | Decay 2 time / Sustain level `0–100` |
-| `T-SUSTAIN` | Sustain hold duration (seconds) |
-| `T4` | Release time (seconds) |
+| Parameter | Range | Description |
+|---|---|---|
+| `BIAS-INTENSITY` | `0–100` | Asymmetric clipping intensity |
+| `USER-DRIVE-IN` | `1–10` | Soft saturation drive amount |
+| `USER-DRIFT-IN` | `0–100` | Random per-sample pitch and amplitude drift |
+| `USER-CRUSH-IN` | `1–2000` | Bit crush factor |
 
-#### Filter Envelope (TVF)
-Controls how the filter cutoff moves over the note's duration. Values are offsets from the base `KNOB-POSITION`.
+---
 
-| Parameter | Description |
-|---|---|
-| `CUT-T1` / `CUT-L1` | Attack time / Attack cutoff offset `-50–50` |
-| `CUT-T2` / `CUT-L2` | Decay 1 time / Break cutoff offset |
-| `CUT-T3` / `CUT-L3` | Decay 2 time / Sustain cutoff offset |
-| `CUT-T-SUSTAIN` | Sustain hold duration |
-| `CUT-T4` | Release time |
-| `TVF-DEPTH` | Overall envelope depth `-100–100` |
+#### Volume Envelope — TVA
+
+| Parameter | Range | Description |
+|---|---|---|
+| `T1` | `0.00–99.99` s | Attack time |
+| `L1` | `0–100` | Attack peak level |
+| `T2` | `0.00–99.99` s | Decay 1 time |
+| `L2` | `0–100` | Break level |
+| `T3` | `0.00–99.99` s | Decay 2 time |
+| `L3` | `0–100` | Sustain level |
+| `T-SUSTAIN` | `0.00–99.99` s | Sustain hold duration |
+| `T4` | `0.00–99.99` s | Release time |
+
+---
+
+#### Filter Envelope — TVF
+
+Offsets the filter cutoff over the note duration, relative to the base `KNOB-POSITION`, scaled by `TVF-DEPTH`.
+
+| Parameter | Range | Description |
+|---|---|---|
+| `CUT-T1` | `0.00–99.99` s | Attack time |
+| `CUT-L1` | `−100–+100` | Cutoff offset at attack peak |
+| `CUT-T2` | `0.00–99.99` s | Decay 1 time |
+| `CUT-L2` | `−100–+100` | Cutoff offset at break point |
+| `CUT-T3` | `0.00–99.99` s | Decay 2 time |
+| `CUT-L3` | `−100–+100` | Sustain cutoff offset |
+| `CUT-T-SUSTAIN` | `0.00–99.99` s | Sustain hold duration |
+| `CUT-T4` | `0.00–99.99` s | Release time |
+| `TVF-DEPTH` | `−100–+100` | Global depth multiplier for the entire TVF envelope |
+
+---
+
+#### LFO 1
+
+| Parameter | Range | Description |
+|---|---|---|
+| `LFO1-WAVEFORM` | `1–8` | `1`=Sine, `2`=Triangle, `3`=Sawtooth Up, `4`=Sawtooth Down, `5`=Square, `6`=Sample & Hold, `7`=Smooth Random, `8`=User RAW (from `LFO-Wave.raw`) |
+| `LFO1-RATE-HZ` | `0.0–999.9` Hz | Oscillation speed. `0` = LFO off |
+| `LFO1-DELAY-SEC` | `0.0–999.9` s | Silence before LFO onset |
+| `LFO1-FADE-SEC` | `−999–+999` s | Positive = fade in over N seconds. Negative = fade out. `0` = no fade |
+| `LFO1-OFFSET` | `−100–+100` | DC offset applied to the LFO output |
+| `LFO1-KEY-TRIG` | `0` or `1` | `1` = phase resets on each note. `0` = free-running |
+| `LFO1-TVA-DEPTH` | `−100–+100` | Amplitude modulation depth (tremolo) |
+| `LFO1-TVF-DEPTH` | `−100–+100` | Filter cutoff modulation depth (filter wobble, in knob units) |
+| `LFO1-PTCH-DPTH` | `−120–+120` | Pitch modulation depth (vibrato). `10` units = 1 semitone |
+| `LFO1-PHASE-OFFS` | `0–359` degrees | Starting phase offset |
+| `LFO1-FM-DEPTH` | `−100–+100` | LFO1-to-LFO2 frequency modulation depth |
+
+---
+
+#### LFO 2
+
+Same parameters as LFO1, except there is no `LFO2-FM-DEPTH` — LFO2 is the FM target, not the source.
+
+| Parameter | Range | Description |
+|---|---|---|
+| `LFO2-WAVEFORM` | `1–8` | Same waveform options as LFO1 |
+| `LFO2-RATE-HZ` | `0.0–999.9` Hz | Oscillation speed (before any FM from LFO1) |
+| `LFO2-DELAY-SEC` | `0.0–999.9` s | Silence before LFO onset |
+| `LFO2-FADE-SEC` | `−999–+999` s | Fade envelope |
+| `LFO2-OFFSET` | `−100–+100` | DC offset on LFO2 output |
+| `LFO2-KEY-TRIG` | `0` or `1` | Phase trigger on note start |
+| `LFO2-TVA-DEPTH` | `−100–+100` | Amplitude modulation depth. Summed with LFO1 TVA output |
+| `LFO2-TVF-DEPTH` | `−100–+100` | Filter cutoff modulation depth. Summed with LFO1 TVF output |
+| `LFO2-PTCH-DPTH` | `−120–+120` | Pitch modulation depth. Summed with LFO1 pitch output |
+| `LFO2-PHASE-OFFS` | `0–359` degrees | Starting phase offset |
 
 ### Copy Parameters
 
@@ -293,72 +416,165 @@ The script patches the COBOL source for each preset, writes `FX1.cbl` through `F
 
 ### FX Effects Reference
 
+All parameters are patched into `COMOLFX.cbl` by `FX-RUN.py` before compilation. The signal chain runs in a fixed order and cannot be reordered.
+
+---
+
 #### Effect 1 — Spectrum (State Variable EQ)
 
-A band-pass EQ that boosts or cuts a frequency band centred at `FX-SPEC-FREQ` and blends it back into the dry signal.
+A State Variable Filter (SVF) used as a parametric band-pass EQ. On every sample the SVF simultaneously computes low-pass, band-pass, and high-pass outputs; only the band-pass signal is used, and it is blended back additively into the dry signal. This means it boosts or cuts a frequency band rather than replacing the signal, preserving the original character.
 
-| Parameter | Variable | Default | Range |
-|---|---|---|---|
-| Centre Frequency | `FX-SPEC-FREQ` | `0.45` | `0.01 – 0.95` |
-| Resonance (Q) | `FX-SPEC-Q` | `0.85` | `0.1 – 0.99` |
-| Band Gain | `FX-SPEC-GAIN` | `0.50` | `−0.50 – 2.00` |
+Per-sample equations:
+```
+SP-LOW  = (SP-LOW  + (FX-SPEC-FREQ × SP-BAND)) × 0.999
+SP-HIGH = CURRENT-SAMPLE − SP-LOW − (FX-SPEC-Q × SP-BAND)
+SP-BAND = (SP-BAND + (FX-SPEC-FREQ × SP-HIGH)) × 0.999
+OUTPUT  = CURRENT-SAMPLE + (SP-BAND × FX-SPEC-GAIN)
+```
+The `× 0.999` damping factor on both the low and band paths prevents DC build-up at low frequencies.
+
+| Parameter | Variable | Default | Range | Description |
+|---|---|---|---|---|
+| Centre Frequency | `FX-SPEC-FREQ` | `0.45` | `0.01–0.95` | Normalised cutoff. Maps linearly from near-DC (`0.01`) to near-Nyquist (`0.95`). At 44.1 kHz, `0.45` sits in the upper midrange (~8–10 kHz). Keep below `0.95` to avoid filter instability |
+| Resonance (Q) | `FX-SPEC-Q` | `0.85` | `0.1–0.99` | Bandwidth of the band-pass. Low values produce a wide, gentle curve; high values narrow the band and increase resonant ringing. Values above `0.90` can become unstable |
+| Band Gain | `FX-SPEC-GAIN` | `0.50` | `−0.50–2.00` | Scales the band-pass signal before it is mixed back. Positive values boost; negative values cut. At `0.0` the effect is fully bypassed. Values above `1.0` produce aggressive boosts and may push the saturator into heavier clipping |
+
+---
 
 #### Effect 2 — Saturator
 
-Hard-clipping drive stage. Amplifies the signal then clamps it to ±32,000, generating harmonics from subtle warmth to aggressive clipping.
+A hard-clipping drive stage that models the onset of tube or tape saturation. The signal is amplified by a factor derived from `FX-DRIVE-AMOUNT` and then hard-clamped to ±32,000, generating harmonic distortion.
 
-| Parameter | Variable | Default | Range |
-|---|---|---|---|
-| Drive Amount | `FX-DRIVE-AMOUNT` | `0.75` | `0.0 – 2.0` |
+Per-sample equations:
+```
+AMPLIFIED = CURRENT-SAMPLE × (1.0 + FX-DRIVE-AMOUNT ÷ 2)
+OUTPUT    = CLAMP(AMPLIFIED, −32000, +32000)
+```
+At `FX-DRIVE-AMOUNT = 0.0` the factor is `1.0` and the signal passes through unchanged. At `2.0` the factor is `2.0`, doubling amplitude before clamping. The Saturator runs before all time-based effects, so its harmonic content feeds into Phaser, Chorus, Delay, and Reverb.
+
+| Parameter | Variable | Default | Range | Description |
+|---|---|---|---|---|
+| Drive Amount | `FX-DRIVE-AMOUNT` | `0.75` | `0.0–2.0` | Pre-clipping gain. `0.0` = bypass. `0.1–0.5` = subtle warmth. `0.5–1.5` = noticeable harmonic saturation. Above `1.5` = hard clipping and heavy distortion |
+
+---
 
 #### Effect 3 — Phaser
 
-A 4-stage all-pass phaser with LFO sweep and feedback. The LFO uses a 16,384-point sine table with linear interpolation.
+A 4-stage all-pass filter swept by a sinusoidal LFO. Each stage shifts the phase of the signal without altering its amplitude; when the four shifted versions are summed with the dry signal, moving cancellation notches produce the characteristic phaser sweep. The LFO reads from a 16,384-point lookup table with linear interpolation between entries.
 
-| Parameter | Variable | Default | Range |
-|---|---|---|---|
-| LFO Rate | `FX-PHASER-RATE` | `0.400` | `0.01 – 8.0` Hz |
-| Depth | `FX-PHASER-DEPTH` | `0.90` | `0.0 – 1.0` |
-| Manual Position | `FX-PHASER-MANUAL` | `0.50` | `0.0 – 1.0` |
-| Feedback | `FX-PHASER-FBACK` | `0.75` | `0.0 – 0.95` |
-| Wet/Dry Mix | `FX-PHASER-MIX` | `0.50` | `0.0 – 1.0` |
+**LFO and coefficient calculation:**
+```
+LFO phase advance per sample = FX-PHASER-RATE / 44100 × 2π
+AP-COEFF = CLAMP(FX-PHASER-MANUAL + (LFO × FX-PHASER-DEPTH × 0.5), −0.95, +0.95)
+```
+
+**Feedback (smoothed one-pole IIR at 70/30 ratio):**
+```
+P-FB-SIG = (P-FB-SIG × 0.7) + (PHASER-LPF-MEM × 0.3)
+P-IN     = CURRENT-SAMPLE + (P-FB-SIG × FX-PHASER-FBACK)
+```
+
+**Each all-pass cell:**
+```
+P-OUT = (AP-COEFF × (STATE-Y-OLD − P-IN)) + STATE-X-OLD
+```
+
+| Parameter | Variable | Default | Range | Description |
+|---|---|---|---|---|
+| LFO Rate | `FX-PHASER-RATE` | `0.400` | `0.01–8.0` Hz | Speed of the sweep. `0.01–0.3` Hz = slow, ambient wash. `0.3–2` Hz = classic phaser feel. Above `4` Hz = fast vibrato-like effect |
+| Depth | `FX-PHASER-DEPTH` | `0.90` | `0.0–1.0` | How far the LFO sweeps the all-pass coefficient around the manual position. At `0.0` the coefficient is fixed and there is no movement |
+| Manual Position | `FX-PHASER-MANUAL` | `0.50` | `0.0–1.0` | Static bias added to the LFO output before driving the all-pass coefficient. Shifts the centre frequency of the sweep; `0.5` centres in the midrange |
+| Feedback | `FX-PHASER-FBACK` | `0.75` | `0.0–0.95` | Amount of phased signal fed back into the input. Below `0.3` = soft diffuse sweep. Above `0.6` = resonant, whistling notches. Do not exceed `0.95` |
+| Wet/Dry Mix | `FX-PHASER-MIX` | `0.50` | `0.0–1.0` | Blend between dry and phased signal. At `0.0` the phaser is silent; at `1.0` only the phased signal is heard |
+
+---
 
 #### Effect 4 — Chorus (Stereo)
 
-2-voice-per-channel stereo modulated delay. Left and right LFO phases are offset by 90° to guarantee a wide, constantly-moving stereo image. Uses a 9,000×9-tap sinc table for interpolation on the read path.
+A 2-voice-per-channel stereo modulated delay. Two slightly detuned, time-varying copies of the signal per channel are blended with the dry signal to produce lush ensemble shimmer. Each channel has a 4,096-sample circular delay buffer. Modulated read positions are interpolated using a 9,000×9-tap polyphase sinc table for smooth, alias-free pitch modulation.
 
-| Parameter | Variable | Default | Range |
+**LFO phase offsets per voice:**
+
+| Channel | Voice | LFO Phase Offset | Base Delay |
 |---|---|---|---|
-| LFO Rate | `FX-CHORUS-RATE` | `0.85` | `0.01 – 5.0` Hz |
-| Depth | `FX-CHORUS-DEPTH` | `65.0` | `0 – 300` samples |
-| Wet/Dry Mix | `FX-CHORUS-MIX` | `0.60` | `0.0 – 1.0` |
+| Left | 1 | 0° | 1,323 samples (~30 ms) |
+| Left | 2 | 90° | 1,383 samples (~31.3 ms) |
+| Right | 1 | 90° | 1,323 samples (~30 ms) |
+| Right | 2 | 180° | 1,383 samples (~31.3 ms) |
+
+The 90° quadrature offset between left and right channels guarantees a wide, constantly-moving stereo image. After both voices for each channel are averaged, a one-pole IIR low-pass filter (~13 kHz cutoff) suppresses interpolation artefacts:
+```
+LPF-MEM = (LPF-MEM × 0.15) + (WET × 0.85)
+```
+
+| Parameter | Variable | Default | Range | Description |
+|---|---|---|---|---|
+| LFO Rate | `FX-CHORUS-RATE` | `0.85` | `0.01–5.0` Hz | Modulation speed. `0.01–0.3` Hz = slow, deep detuning. `0.5–1.5` Hz = natural ensemble chorus. Above `3` Hz = pitch vibrato territory |
+| Depth | `FX-CHORUS-DEPTH` | `65.0` | `0–300` samples | How far the read pointer swings around the base delay tap. At `0` there is no pitch modulation (the effect becomes a fixed comb filter). At `300` the sweep is ±300 samples (~6.8 ms). Most musical values sit between `30` and `100` |
+| Wet/Dry Mix | `FX-CHORUS-MIX` | `0.60` | `0.0–1.0` | Blend between dry mono and processed stereo wet signal. `0.4–0.7` covers most musical use cases |
+
+---
 
 #### Effect 5 — Delay (Stereo Ping-Pong)
 
-Stereo ping-pong delay. Each channel's echo feeds back into the opposite channel's buffer, making repeats alternate sides. Buffer is 44,100 samples (1,000 ms max).
+A stereo ping-pong delay where each channel's echo feeds back into the *opposite* channel's buffer, causing repeats to alternate sides rhythmically. Both channels share a 44,100-sample circular buffer (exactly 1,000 ms at 44.1 kHz). All buffer positions are zeroed at initialisation.
 
-| Parameter | Variable | Default | Range |
-|---|---|---|---|
-| Delay Time | `FX-DELAY-MS` | `450.00` | `10 – 1000` ms |
-| Feedback | `FX-DELAY-FBACK` | `0.65` | `0.0 – 0.95` |
-| Wet/Dry Mix | `FX-DELAY-MIX` | `0.45` | `0.0 – 1.0` |
+**Cross-feed write (creates the ping-pong behaviour):**
+```
+DELAY-BUF-L[WRITE-PTR] = SAMPLE-L + (WET-R × FX-DELAY-FBACK)
+DELAY-BUF-R[WRITE-PTR] = SAMPLE-R + (WET-L × FX-DELAY-FBACK)
+```
+Feedback values are clamped to ±32,000 before writing to prevent overflow on long tails.
 
-> **Note:** The GUI shows a range up to 3,000 ms but the buffer is fixed at 1,000 ms. Keep delay time within `10–1000` ms to avoid incorrect wrapping.
+| Parameter | Variable | Default | Range | Description |
+|---|---|---|---|---|
+| Delay Time | `FX-DELAY-MS` | `450.00` | `10–1000` ms | Echo time in milliseconds. The buffer is fixed at 1,000 ms; values the GUI shows above 1,000 ms will wrap incorrectly — keep within `10–1000`. Common musical values: `125` ms (eighth note at 120 BPM), `250` ms (quarter), `375` ms (dotted eighth), `500` ms (half) |
+| Feedback | `FX-DELAY-FBACK` | `0.65` | `0.0–0.95` | Proportion of echo signal fed back each repeat. At `0.0` only a single echo is heard. At `0.95` echoes repeat many times before fading. Values at or above `1.0` risk runaway accumulation |
+| Wet/Dry Mix | `FX-DELAY-MIX` | `0.45` | `0.0–1.0` | Blend between the original signal and the delayed echoes |
+
+---
 
 #### Effect 6 — Reverb (Parallel Comb Tank)
 
-Four-tank parallel Schroeder-style comb filter reverb with stereo cross-feed. Tank lengths are 1,600 / 1,800 / 2,000 / 2,250 samples, chosen to produce a dense tail without obvious periodicity.
+Four parallel Schroeder-style comb filter loops with stereo cross-feed. Running four tanks simultaneously at different lengths builds a dense, non-periodic reverberant tail without the obvious metallic coloration of a single comb.
 
-| Parameter | Variable | Default | Range |
-|---|---|---|---|
-| Decay | `FX-REV-DECAY` | `0.960` | `0.70 – 0.999` |
-| Wet/Dry Mix | `FX-REV-MIX` | `0.55` | `0.0 – 1.0` |
+**Tank buffer lengths:**
 
-> Do not set `FX-REV-DECAY` to 1.0 or above — the buffers will grow without bound.
+| Tank | Buffer Length | Approximate Delay |
+|---|---|---|
+| 1 | 1,600 samples | ~36 ms |
+| 2 | 1,800 samples | ~41 ms |
+| 3 | 2,000 samples | ~45 ms |
+| 4 | 2,250 samples | ~51 ms |
+
+**Per-tank per-sample update:**
+```
+NEW-VALUE = (DIRECT × 0.31) + (BUFFER[PTR] × FX-REV-DECAY) + (CROSS-CHANNEL × 0.09)
+```
+`0.31` is the direct injection coefficient. `FX-REV-DECAY` is the feedback coefficient determining tail length. `0.09` is the cross-channel injection coefficient — a small amount of the opposite channel leaks into each tank, creating stereo widening and preventing both channels from decaying identically.
+
+**Output mix (with 0.55 wet scaling to prevent overload from four summed tanks):**
+```
+OUTPUT-L = (DRY-L × (1 − FX-REV-MIX)) + (WET-L × 0.55 × FX-REV-MIX)
+OUTPUT-R = (DRY-R × (1 − FX-REV-MIX)) + (WET-R × 0.55 × FX-REV-MIX)
+```
+
+| Parameter | Variable | Default | Range | Description |
+|---|---|---|---|---|
+| Decay | `FX-REV-DECAY` | `0.960` | `0.70–0.999` | Comb filter feedback coefficient. `0.70–0.80` = tight room ambience. `0.90–0.95` = medium hall. Close to `0.999` = long cathedral wash. **Do not set at or above `1.0`** — the buffers will grow without bound |
+| Wet/Dry Mix | `FX-REV-MIX` | `0.55` | `0.0–1.0` | Blend between dry signal and reverb tail. At `1.0` almost only the tail is heard with minimal transient |
+
+---
 
 #### DC Blocker (Internal)
 
-A fixed first-order IIR high-pass filter (coefficient 0.995, ~5.5 Hz cutoff) applied to both channels as the final stage. No user parameters. Removes DC offset accumulated through the feedback loops.
+A fixed first-order IIR high-pass filter applied to both channels as the absolute last stage before writing the output files. No user-facing parameters.
+
+Coefficient: `0.995`. Gives a −3 dB cutoff of approximately `5.5 Hz` — well below the threshold of human hearing. Purpose: removes DC offset accumulated through the comb filter feedback loops, preventing clicks, pops, and DAC clipping on playback.
+
+```
+OUTPUT = SAMPLE − DC-IN-OLD + (0.995 × DC-OUT-OLD)
+```
 
 ### Assembling Stereo Output in Audacity
 
@@ -422,10 +638,11 @@ The pattern repeats throughout playback. Shorter patterns create rhythmic digita
 
 ## To Do
 
-1. ~~Implement LFOs~~ 
-2. ~~Update the filter from a static to a dynamic time variant style.~~ 
-3. Write a Mainframe compliant version of the code. 
-4. Expand the sample bank with all the waveforms from the original JD800.
-5. ~~Find a way to 'batch' generate 4 or more outputs to better match the 4 voices of the JD800.~~
-6. ~~Implement basic JD800 style FX.~~
-7. Remake the readmes to better reflect the current state of the program
+1. ~~Implement LFOs~~
+2. ~~Update the filter from static to dynamic Time Variant style~~
+3. Write a mainframe-compliant version of the code
+4. Expand the sample bank with all waveforms from the original JD800
+5. ~~Batch-generate 4 or more outputs to better match the 4 voices of the JD800~~
+6. ~~Implement basic JD800-style FX~~
+7. ~~Add a stereo FX module~~
+8. ~~Remake the readmes to better reflect the current state of the program~~
