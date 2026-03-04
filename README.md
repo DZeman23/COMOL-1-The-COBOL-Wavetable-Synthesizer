@@ -645,4 +645,4 @@ The pattern repeats throughout playback. Shorter patterns create rhythmic digita
 5. ~~Batch-generate 4 or more outputs to better match the 4 voices of the JD800~~
 6. ~~Implement basic JD800-style FX~~
 7. ~~Add a stereo FX module~~
-8. ~~Remake the readmes to better reflect the current state of the program~~
+8. Remake the readmes to better reflect the current state of the program
