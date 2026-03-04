@@ -13,26 +13,22 @@
        FILE-CONTROL.
 
            SELECT IN-FILE ASSIGN TO
-           "your/filepath/here.raw"
+           "your\path\to\Output.raw"
                ORGANIZATION IS SEQUENTIAL
                ACCESS MODE  IS SEQUENTIAL
                FILE STATUS  IS WS-IN-STATUS.
 
-           SELECT SINC-FILE ASSIGN TO
-           "your/filepath/here.raw"
-           ORGANIZATION IS BINARY SEQUENTIAL.
-
            SELECT OUT-FILE-L ASSIGN TO
-           "C:\Users\Vicky Myburgh\Desktop\Sine Generator\Output2.raw"
+              "your\path\to\Output2.raw"
                ORGANIZATION IS SEQUENTIAL
                ACCESS MODE  IS SEQUENTIAL
                FILE STATUS  IS WS-OUT-STATUS.
 
            SELECT OUT-FILE-R ASSIGN TO
-           "C:\Users\Vicky Myburgh\Desktop\Sine Generator\Output3.raw"
+              "your\path\to\Output3.raw"
                ORGANIZATION IS SEQUENTIAL
                ACCESS MODE  IS SEQUENTIAL
-               FILE STATUS  IS WS-OUT-STATUS.
+               FILE STATUS  IS WS-OUT-R-STATUS.
 
        DATA DIVISION.
        FILE SECTION.
@@ -48,8 +44,7 @@
        FD  OUT-FILE-R
            RECORD CONTAINS 2 CHARACTERS.
        01  OUT-RECORD-R            PIC X(2).
-       FD  SINC-FILE.
-       01  SINC-FILE-RECORD  PIC X(8).
+
 
        WORKING-STORAGE SECTION.
       * The precise calculated position (e.g., 380.45921)
@@ -73,6 +68,7 @@
 
        01  WS-IN-STATUS            PIC X(2).
        01  WS-OUT-STATUS           PIC X(2).
+       01  WS-OUT-R-STATUS         PIC X(2).
 
        01  WS-IN-SAMPLE.
            05  WS-IN-BYTES         PIC X(2).
@@ -168,6 +164,34 @@
                                 PIC S9(7)V9(4) COMP-5.
            05  R-A2-BUF         OCCURS  120  TIMES
                                 PIC S9(7)V9(4) COMP-5.
+      *------------------------------------------------------------*
+      * CATHEDRAL REVERB BUFFERS                                   *
+      * Larger comb delays (50-86ms) produce the longer, denser    *
+      * tail required for a convincing cathedral-scale space.      *
+      * Separate R-channel allpass buffers provide true stereo     *
+      * diffusion (L-channel allpass reuses R-A1-BUF / R-A2-BUF). *
+      *------------------------------------------------------------*
+           05  CAT-C1-BUF-L     OCCURS 2205  TIMES
+                                PIC S9(7)V9(4) COMP-5.
+           05  CAT-C1-BUF-R     OCCURS 2205  TIMES
+                                PIC S9(7)V9(4) COMP-5.
+           05  CAT-C2-BUF-L     OCCURS 2690  TIMES
+                                PIC S9(7)V9(4) COMP-5.
+           05  CAT-C2-BUF-R     OCCURS 2690  TIMES
+                                PIC S9(7)V9(4) COMP-5.
+           05  CAT-C3-BUF-L     OCCURS 3175  TIMES
+                                PIC S9(7)V9(4) COMP-5.
+           05  CAT-C3-BUF-R     OCCURS 3175  TIMES
+                                PIC S9(7)V9(4) COMP-5.
+           05  CAT-C4-BUF-L     OCCURS 3808  TIMES
+                                PIC S9(7)V9(4) COMP-5.
+           05  CAT-C4-BUF-R     OCCURS 3808  TIMES
+                                PIC S9(7)V9(4) COMP-5.
+      * Right-channel allpass delay lines (L uses R-A1/A2-BUF)
+           05  CAT-A1-BUF-R     OCCURS  350  TIMES
+                                PIC S9(7)V9(4) COMP-5.
+           05  CAT-A2-BUF-R     OCCURS  120  TIMES
+                                PIC S9(7)V9(4) COMP-5.
 
        01  POINTERS            USAGE COMP-5.
            05  C-WRITE-PTR     PIC 9(5)     VALUE 0.
@@ -179,6 +203,16 @@
            05  R-PTR-2         PIC 9(5)     VALUE 1.
            05  R-PTR-3         PIC 9(5)     VALUE 1.
            05  R-PTR-4         PIC 9(5)     VALUE 1.
+      *------------------------------------------------------------*
+      * CATHEDRAL REVERB WRITE POINTERS                           *
+      * One pointer per comb tank + two for the allpass chain.    *
+      *------------------------------------------------------------*
+           05  CAT-PTR-1       PIC 9(5)     VALUE 1.
+           05  CAT-PTR-2       PIC 9(5)     VALUE 1.
+           05  CAT-PTR-3       PIC 9(5)     VALUE 1.
+           05  CAT-PTR-4       PIC 9(5)     VALUE 1.
+           05  CAT-A1-PTR      PIC 9(5)     VALUE 1.
+           05  CAT-A2-PTR      PIC 9(5)     VALUE 1.
 
        01  WS-INDICES          USAGE COMP-5.
            05  TEMP-IDX        PIC 9(5).
@@ -213,9 +247,41 @@
            05  FX-DELAY-FBACK  PIC  9V9(2)    VALUE  0.65.
            05  FX-DELAY-MIX    PIC  9V9(2)    VALUE  0.45.
 
-      * 6. REVERB: Long "Cathedral" wash to test Stereo Tank logic
+      * 6. REVERB - SHARED PARAMETERS (apply to both modes)
+           05  FX-REV-MIX      PIC  9V9(2)    VALUE  0.65.
+      *------------------------------------------------------------*
+      * REVERB MODE SELECTOR                                       *
+      *   1 - ROOM      : short comb tanks (36-51ms), allpass     *
+      *                   diffused, compact room tail              *
+      *   2 - CATHEDRAL : long comb tanks (50-86ms), allpass      *
+      *                   diffused, lush cathedral wash            *
+      *------------------------------------------------------------*
+           05  FX-REV-MODE     PIC 9(1)       VALUE 2.
+      * Schroeder allpass feedback gain: first/second stage
+      * Slightly different values reduce metallic resonance
+           05  CAT-AP-G        PIC 9V9(4)     VALUE 0.5000.
+           05  CAT-AP-G2       PIC 9V9(4)     VALUE 0.4800.
+
+      * 6a. REVERB - ROOM MODE PARAMETERS (mode 1)
+      * Decay of 0.960 gives a short tail (~0.4s RT60) suited to
+      * a small room.  Cross-feed and input gain kept conservative.
            05  FX-REV-DECAY    PIC  9V9(3)    VALUE  0.960.
-           05  FX-REV-MIX      PIC  9V9(2)    VALUE  0.55.
+           05  ROOM-INPUT-G    PIC  9V9(2)    VALUE  0.31.
+           05  ROOM-CROSS-G    PIC  9V9(2)    VALUE  0.09.
+      * 1/4-tank normalisation for room wet sum
+           05  ROOM-WET-SCALE  PIC  9V9(2)    VALUE  0.25.
+
+      * 6b. REVERB - CATHEDRAL MODE PARAMETERS (mode 2)
+      * Decay of 0.9950 gives a long tail (~7s RT60) for a
+      * convincing large-space wash.  Higher cross-feed widens
+      * the stereo image; higher input gain strengthens the
+      * early energy fed into the long tanks.
+           05  CAT-REV-DECAY   PIC  9V9(4)    VALUE  0.9950.
+           05  CAT-INPUT-G     PIC  9V9(2)    VALUE  0.45.
+           05  CAT-CROSS-G     PIC  9V9(2)    VALUE  0.35.
+      * Wet scale: higher than room because tanks are longer and
+      * energy builds more slowly; 0.45 gives a full wet presence
+           05  CAT-WET-SCALE   PIC  9V9(2)    VALUE  0.45.
 
        01  CONSTANTS.
            05  SAMPLE-RATE     PIC 9(5)       VALUE 44100.
@@ -278,6 +344,16 @@
            05  DC-IN-R-OLD     PIC S9(7)V9(4) COMP-5 VALUE 0.
            05  DC-OUT-R-OLD    PIC S9(7)V9(4) COMP-5 VALUE 0.
 
+      *------------------------------------------------------------*
+      * CATHEDRAL REVERB WORKING STORAGE                           *
+      * Allpass intermediate values (v = input + g*buf_out).       *
+      * Kept in a dedicated group so they never alias with other    *
+      * effects' temporaries.                                       *
+      *------------------------------------------------------------*
+       01  CAT-REVERB-WORK     USAGE COMP-5.
+           05  CAT-AP-V-L      PIC S9(7)V9(4) VALUE 0.
+           05  CAT-AP-V-R      PIC S9(7)V9(4) VALUE 0.
+
        PROCEDURE DIVISION.
        0000-MAIN-CONTROL.
       *=============================================================*
@@ -321,11 +397,33 @@
            OPEN OUTPUT OUT-FILE-R.
 
        2000-PROCESS-STREAM.
+      *------------------------------------------------------------*
+      * STATUS CODES HANDLED:                                      *
+      *   "00" - successful read, process sample normally          *
+      *   "10" - clean end-of-file (AT END), set flag and stop     *
+      *   "04" - short record: file byte count is not a multiple   *
+      *          of the 2-byte record size (odd-sized file).       *
+      *          Treat as EOF to prevent a follow-up status "46".  *
+      *   "46" - read attempted after a prior failed read.         *
+      *          Also treated as EOF for the same reason.          *
+      * Any other status is a hard I/O error and halts the run.    *
+      *------------------------------------------------------------*
            READ IN-FILE INTO WS-IN-BYTES
                AT END
                    MOVE "Y" TO EOF-FLAG
                NOT AT END
-                   PERFORM 2100-PROCESS-ONE-SAMPLE
+                   EVALUATE WS-IN-STATUS
+                       WHEN "00"
+                           PERFORM 2100-PROCESS-ONE-SAMPLE
+                       WHEN "04"
+                           MOVE "Y" TO EOF-FLAG
+                       WHEN "46"
+                           MOVE "Y" TO EOF-FLAG
+                       WHEN OTHER
+                           DISPLAY "I/O ERROR - status: "
+                               WS-IN-STATUS
+                           MOVE "Y" TO EOF-FLAG
+                   END-EVALUATE
            END-READ.
 
        2100-PROCESS-ONE-SAMPLE.
@@ -456,11 +554,13 @@
 
       * Left channel voices
            PERFORM 4100-CHORUS-LEFT-VOICE-1.
+           MOVE WET-L TO WET-L2
            PERFORM 4110-CHORUS-LEFT-VOICE-2.
            PERFORM 4120-CHORUS-LEFT-APPLY-LPF.
 
       * Right channel voices
            PERFORM 4150-CHORUS-RIGHT-VOICE-1.
+           MOVE WET-R TO WET-R2
            PERFORM 4160-CHORUS-RIGHT-VOICE-2.
            PERFORM 4170-CHORUS-RIGHT-APPLY-LPF.
 
@@ -594,82 +694,303 @@
 
        6000-EFFECT-REVERB-STEREO.
       *=============================================================*
-      * REVERB CONTROLLER
-      * Orchestrates four parallel delay tanks with cross-feed.
-      * Broken into one paragraph per tank + final mix.
+      * REVERB CONTROLLER                                           *
+      * Dispatches to the correct reverb algorithm based on the    *
+      * FX-REV-MODE numeric flag:                                  *
+      *   1 - ROOM      : four short comb tanks + allpass chain    *
+      *                   (paragraphs 6010-6050)                   *
+      *   2 - CATHEDRAL : four long comb tanks + allpass chain     *
+      *                   (paragraphs 6110-6160)                   *
+      * Both modes run the same two-stage Schroeder allpass        *
+      * diffusers (6150/6155) and the same 0.25 normalisation.     *
       *=============================================================*
            MOVE SAMPLE-L TO DRY-L.
            MOVE SAMPLE-R TO DRY-R.
            MOVE 0 TO WET-L.
            MOVE 0 TO WET-R.
 
-           PERFORM 6010-REVERB-TANK-1.
-           PERFORM 6020-REVERB-TANK-2.
-           PERFORM 6030-REVERB-TANK-3.
-           PERFORM 6040-REVERB-TANK-4.
+           IF FX-REV-MODE = 1
+               PERFORM 6010-ROOM-TANK-1
+               PERFORM 6020-ROOM-TANK-2
+               PERFORM 6030-ROOM-TANK-3
+               PERFORM 6040-ROOM-TANK-4
+               PERFORM 6045-ROOM-ALLPASS-1
+               PERFORM 6046-ROOM-ALLPASS-2
+               PERFORM 6050-ROOM-MIX-OUTPUT
+           ELSE
+               PERFORM 6110-CAT-COMB-1
+               PERFORM 6120-CAT-COMB-2
+               PERFORM 6130-CAT-COMB-3
+               PERFORM 6140-CAT-COMB-4
+               PERFORM 6150-CAT-ALLPASS-1
+               PERFORM 6155-CAT-ALLPASS-2
+               PERFORM 6160-CAT-MIX-OUTPUT
+           END-IF.
 
-           PERFORM 6050-REVERB-MIX-OUTPUT.
+      *=============================================================*
+      * ROOM REVERB SECTION (mode 1)                                *
+      * Four parallel feedback comb filters with L/R cross-feed,   *
+      * followed by two chained Schroeder allpass diffusers.        *
+      * Delay times: ~36ms, ~41ms, ~45ms, ~51ms at 44100 Hz.       *
+      *=============================================================*
 
-       6010-REVERB-TANK-1.
+       6010-ROOM-TANK-1.
            COMPUTE TEMP-SAMPLE =
-               (SAMPLE-L * 0.31) + (R-C1-BUF-L(R-PTR-1) * FX-REV-DECAY)
-               + (SAMPLE-R * 0.09).
+               (SAMPLE-L * ROOM-INPUT-G)
+               + (R-C1-BUF-L(R-PTR-1) * FX-REV-DECAY)
+               + (SAMPLE-R * ROOM-CROSS-G).
            MOVE TEMP-SAMPLE TO R-C1-BUF-L(R-PTR-1).
            ADD TEMP-SAMPLE TO WET-L.
            COMPUTE TEMP-SAMPLE =
-               (SAMPLE-R * 0.31) + (R-C1-BUF-R(R-PTR-1) * FX-REV-DECAY)
-               + (SAMPLE-L * 0.09).
+               (SAMPLE-R * ROOM-INPUT-G)
+               + (R-C1-BUF-R(R-PTR-1) * FX-REV-DECAY)
+               + (SAMPLE-L * ROOM-CROSS-G).
            MOVE TEMP-SAMPLE TO R-C1-BUF-R(R-PTR-1).
            ADD TEMP-SAMPLE TO WET-R.
            ADD 1 TO R-PTR-1. IF R-PTR-1 > 1600 MOVE 1 TO R-PTR-1.
 
-       6020-REVERB-TANK-2.
+       6020-ROOM-TANK-2.
            COMPUTE TEMP-SAMPLE =
-               (SAMPLE-L * 0.31) + (R-C2-BUF-L(R-PTR-2) * FX-REV-DECAY)
-               + (SAMPLE-R * 0.09).
+               (SAMPLE-L * ROOM-INPUT-G)
+               + (R-C2-BUF-L(R-PTR-2) * FX-REV-DECAY)
+               + (SAMPLE-R * ROOM-CROSS-G).
            MOVE TEMP-SAMPLE TO R-C2-BUF-L(R-PTR-2).
            ADD TEMP-SAMPLE TO WET-L.
            COMPUTE TEMP-SAMPLE =
-               (SAMPLE-R * 0.31) + (R-C2-BUF-R(R-PTR-2) * FX-REV-DECAY)
-               + (SAMPLE-L * 0.09).
+               (SAMPLE-R * ROOM-INPUT-G)
+               + (R-C2-BUF-R(R-PTR-2) * FX-REV-DECAY)
+               + (SAMPLE-L * ROOM-CROSS-G).
            MOVE TEMP-SAMPLE TO R-C2-BUF-R(R-PTR-2).
            ADD TEMP-SAMPLE TO WET-R.
            ADD 1 TO R-PTR-2. IF R-PTR-2 > 1800 MOVE 1 TO R-PTR-2.
 
-       6030-REVERB-TANK-3.
+       6030-ROOM-TANK-3.
            COMPUTE TEMP-SAMPLE =
-               (SAMPLE-L * 0.31) + (R-C3-BUF-L(R-PTR-3) * FX-REV-DECAY)
-               + (SAMPLE-R * 0.09).
+               (SAMPLE-L * ROOM-INPUT-G)
+               + (R-C3-BUF-L(R-PTR-3) * FX-REV-DECAY)
+               + (SAMPLE-R * ROOM-CROSS-G).
            MOVE TEMP-SAMPLE TO R-C3-BUF-L(R-PTR-3).
            ADD TEMP-SAMPLE TO WET-L.
            COMPUTE TEMP-SAMPLE =
-               (SAMPLE-R * 0.31) + (R-C3-BUF-R(R-PTR-3) * FX-REV-DECAY)
-               + (SAMPLE-L * 0.09).
+               (SAMPLE-R * ROOM-INPUT-G)
+               + (R-C3-BUF-R(R-PTR-3) * FX-REV-DECAY)
+               + (SAMPLE-L * ROOM-CROSS-G).
            MOVE TEMP-SAMPLE TO R-C3-BUF-R(R-PTR-3).
            ADD TEMP-SAMPLE TO WET-R.
            ADD 1 TO R-PTR-3. IF R-PTR-3 > 2000 MOVE 1 TO R-PTR-3.
 
-       6040-REVERB-TANK-4.
+       6040-ROOM-TANK-4.
            COMPUTE TEMP-SAMPLE =
-               (SAMPLE-L * 0.31) + (R-C4-BUF-L(R-PTR-4) * FX-REV-DECAY)
-               + (SAMPLE-R * 0.09).
+               (SAMPLE-L * ROOM-INPUT-G)
+               + (R-C4-BUF-L(R-PTR-4) * FX-REV-DECAY)
+               + (SAMPLE-R * ROOM-CROSS-G).
            MOVE TEMP-SAMPLE TO R-C4-BUF-L(R-PTR-4).
            ADD TEMP-SAMPLE TO WET-L.
            COMPUTE TEMP-SAMPLE =
-               (SAMPLE-R * 0.31) + (R-C4-BUF-R(R-PTR-4) * FX-REV-DECAY)
-               + (SAMPLE-L * 0.09).
+               (SAMPLE-R * ROOM-INPUT-G)
+               + (R-C4-BUF-R(R-PTR-4) * FX-REV-DECAY)
+               + (SAMPLE-L * ROOM-CROSS-G).
            MOVE TEMP-SAMPLE TO R-C4-BUF-R(R-PTR-4).
            ADD TEMP-SAMPLE TO WET-R.
            ADD 1 TO R-PTR-4. IF R-PTR-4 > 2250 MOVE 1 TO R-PTR-4.
 
-       6050-REVERB-MIX-OUTPUT.
-      * Much stronger wet output
+       6045-ROOM-ALLPASS-1.
+      * ROOM - ALLPASS DIFFUSER 1 (~7.9ms / 350 samples)
+      * Smooths the comb output from a pattern of echoes into a
+      * more continuous wash. Uses the same buffers and pointers
+      * as the cathedral allpass stage; modes are mutually
+      * exclusive so there is no state collision.
+      *
+      * LEFT CHANNEL
+           COMPUTE CAT-AP-V-L =
+               WET-L + (CAT-AP-G * R-A1-BUF(CAT-A1-PTR)).
+           COMPUTE WET-L =
+               R-A1-BUF(CAT-A1-PTR) - (CAT-AP-G * CAT-AP-V-L).
+           MOVE CAT-AP-V-L TO R-A1-BUF(CAT-A1-PTR).
+      * RIGHT CHANNEL
+           COMPUTE CAT-AP-V-R =
+               WET-R + (CAT-AP-G * CAT-A1-BUF-R(CAT-A1-PTR)).
+           COMPUTE WET-R =
+               CAT-A1-BUF-R(CAT-A1-PTR) - (CAT-AP-G * CAT-AP-V-R).
+           MOVE CAT-AP-V-R TO CAT-A1-BUF-R(CAT-A1-PTR).
+      * ADVANCE SHARED POINTER
+           ADD 1 TO CAT-A1-PTR.
+           IF CAT-A1-PTR > 350 MOVE 1 TO CAT-A1-PTR.
+
+       6046-ROOM-ALLPASS-2.
+      * ROOM - ALLPASS DIFFUSER 2 (~2.7ms / 120 samples)
+      * Second diffusion stage, further densifies the tail.
+      * Uses CAT-AP-G2 (0.48) slightly detuned from stage 1
+      * to reduce metallic resonance at the allpass frequency.
+      *
+      * LEFT CHANNEL
+           COMPUTE CAT-AP-V-L =
+               WET-L + (CAT-AP-G2 * R-A2-BUF(CAT-A2-PTR)).
+           COMPUTE WET-L =
+               R-A2-BUF(CAT-A2-PTR) - (CAT-AP-G2 * CAT-AP-V-L).
+           MOVE CAT-AP-V-L TO R-A2-BUF(CAT-A2-PTR).
+      * RIGHT CHANNEL
+           COMPUTE CAT-AP-V-R =
+               WET-R + (CAT-AP-G2 * CAT-A2-BUF-R(CAT-A2-PTR)).
+           COMPUTE WET-R =
+               CAT-A2-BUF-R(CAT-A2-PTR) - (CAT-AP-G2 * CAT-AP-V-R).
+           MOVE CAT-AP-V-R TO CAT-A2-BUF-R(CAT-A2-PTR).
+      * ADVANCE SHARED POINTER
+           ADD 1 TO CAT-A2-PTR.
+           IF CAT-A2-PTR > 120 MOVE 1 TO CAT-A2-PTR.
+
+       6050-ROOM-MIX-OUTPUT.
+      * WET-L/R is the sum of 4 comb tanks post-allpass.
+      * ROOM-WET-SCALE (0.25 = 1/4 tanks) normalises amplitude
+      * before FX-REV-MIX blends wet against dry.
            COMPUTE SAMPLE-L =
                (DRY-L * (1 - FX-REV-MIX)) +
-               (WET-L * 0.55 * FX-REV-MIX).
+               (WET-L * ROOM-WET-SCALE * FX-REV-MIX).
            COMPUTE SAMPLE-R =
                (DRY-R * (1 - FX-REV-MIX)) +
-               (WET-R * 0.55 * FX-REV-MIX).
+               (WET-R * ROOM-WET-SCALE * FX-REV-MIX).
+
+      *=============================================================*
+      * CATHEDRAL REVERB SECTION (mode 2)                           *
+      * Four parallel feedback comb filters with longer delays      *
+      * followed by two chained Schroeder allpass diffusers.        *
+      *                                                             *
+      * Differences vs. ROOM (mode 1):                             *
+      *  1. Larger comb buffers: ~50ms, ~61ms, ~72ms, ~86ms         *
+      *     -- produces a longer, denser, more spacious tail        *
+      *  2. Allpass buffers and pointers are shared with mode 1;    *
+      *     safe because both modes are mutually exclusive          *
+      *                                                             *
+      * Allpass formula (Schroeder):                                *
+      *   v      = input + CAT-AP-G * buffer[ptr]                   *
+      *   output = buffer[ptr] - CAT-AP-G * v                       *
+      *   buffer[ptr] = v                                           *
+      *=============================================================*
+
+       6110-CAT-COMB-1.
+      * CATHEDRAL - COMB TANK 1 (~50ms / 2205 samples at 44100 Hz)
+           COMPUTE TEMP-SAMPLE =
+               (SAMPLE-L * CAT-INPUT-G)
+               + (CAT-C1-BUF-L(CAT-PTR-1) * CAT-REV-DECAY)
+               + (SAMPLE-R * CAT-CROSS-G).
+           MOVE TEMP-SAMPLE TO CAT-C1-BUF-L(CAT-PTR-1).
+           ADD TEMP-SAMPLE TO WET-L.
+           COMPUTE TEMP-SAMPLE =
+               (SAMPLE-R * CAT-INPUT-G)
+               + (CAT-C1-BUF-R(CAT-PTR-1) * CAT-REV-DECAY)
+               + (SAMPLE-L * CAT-CROSS-G).
+           MOVE TEMP-SAMPLE TO CAT-C1-BUF-R(CAT-PTR-1).
+           ADD TEMP-SAMPLE TO WET-R.
+           ADD 1 TO CAT-PTR-1.
+           IF CAT-PTR-1 > 2205 MOVE 1 TO CAT-PTR-1.
+
+       6120-CAT-COMB-2.
+      * CATHEDRAL - COMB TANK 2 (~61ms / 2690 samples at 44100 Hz)
+           COMPUTE TEMP-SAMPLE =
+               (SAMPLE-L * CAT-INPUT-G)
+               + (CAT-C2-BUF-L(CAT-PTR-2) * CAT-REV-DECAY)
+               + (SAMPLE-R * CAT-CROSS-G).
+           MOVE TEMP-SAMPLE TO CAT-C2-BUF-L(CAT-PTR-2).
+           ADD TEMP-SAMPLE TO WET-L.
+           COMPUTE TEMP-SAMPLE =
+               (SAMPLE-R * CAT-INPUT-G)
+               + (CAT-C2-BUF-R(CAT-PTR-2) * CAT-REV-DECAY)
+               + (SAMPLE-L * CAT-CROSS-G).
+           MOVE TEMP-SAMPLE TO CAT-C2-BUF-R(CAT-PTR-2).
+           ADD TEMP-SAMPLE TO WET-R.
+           ADD 1 TO CAT-PTR-2.
+           IF CAT-PTR-2 > 2690 MOVE 1 TO CAT-PTR-2.
+
+       6130-CAT-COMB-3.
+      * CATHEDRAL - COMB TANK 3 (~72ms / 3175 samples at 44100 Hz)
+           COMPUTE TEMP-SAMPLE =
+               (SAMPLE-L * CAT-INPUT-G)
+               + (CAT-C3-BUF-L(CAT-PTR-3) * CAT-REV-DECAY)
+               + (SAMPLE-R * CAT-CROSS-G).
+           MOVE TEMP-SAMPLE TO CAT-C3-BUF-L(CAT-PTR-3).
+           ADD TEMP-SAMPLE TO WET-L.
+           COMPUTE TEMP-SAMPLE =
+               (SAMPLE-R * CAT-INPUT-G)
+               + (CAT-C3-BUF-R(CAT-PTR-3) * CAT-REV-DECAY)
+               + (SAMPLE-L * CAT-CROSS-G).
+           MOVE TEMP-SAMPLE TO CAT-C3-BUF-R(CAT-PTR-3).
+           ADD TEMP-SAMPLE TO WET-R.
+           ADD 1 TO CAT-PTR-3.
+           IF CAT-PTR-3 > 3175 MOVE 1 TO CAT-PTR-3.
+
+       6140-CAT-COMB-4.
+      * CATHEDRAL - COMB TANK 4 (~86ms / 3808 samples at 44100 Hz)
+           COMPUTE TEMP-SAMPLE =
+               (SAMPLE-L * CAT-INPUT-G)
+               + (CAT-C4-BUF-L(CAT-PTR-4) * CAT-REV-DECAY)
+               + (SAMPLE-R * CAT-CROSS-G).
+           MOVE TEMP-SAMPLE TO CAT-C4-BUF-L(CAT-PTR-4).
+           ADD TEMP-SAMPLE TO WET-L.
+           COMPUTE TEMP-SAMPLE =
+               (SAMPLE-R * CAT-INPUT-G)
+               + (CAT-C4-BUF-R(CAT-PTR-4) * CAT-REV-DECAY)
+               + (SAMPLE-L * CAT-CROSS-G).
+           MOVE TEMP-SAMPLE TO CAT-C4-BUF-R(CAT-PTR-4).
+           ADD TEMP-SAMPLE TO WET-R.
+           ADD 1 TO CAT-PTR-4.
+           IF CAT-PTR-4 > 3808 MOVE 1 TO CAT-PTR-4.
+
+       6150-CAT-ALLPASS-1.
+      * CATHEDRAL - ALLPASS DIFFUSER 1 (~7.9ms / 350 samples)
+      * Applies Schroeder allpass to WET-L (using R-A1-BUF) and
+      * WET-R (using CAT-A1-BUF-R) independently for true stereo.
+      *
+      * LEFT CHANNEL
+           COMPUTE CAT-AP-V-L =
+               WET-L + (CAT-AP-G * R-A1-BUF(CAT-A1-PTR)).
+           COMPUTE WET-L =
+               R-A1-BUF(CAT-A1-PTR) - (CAT-AP-G * CAT-AP-V-L).
+           MOVE CAT-AP-V-L TO R-A1-BUF(CAT-A1-PTR).
+      * RIGHT CHANNEL
+           COMPUTE CAT-AP-V-R =
+               WET-R + (CAT-AP-G * CAT-A1-BUF-R(CAT-A1-PTR)).
+           COMPUTE WET-R =
+               CAT-A1-BUF-R(CAT-A1-PTR) - (CAT-AP-G * CAT-AP-V-R).
+           MOVE CAT-AP-V-R TO CAT-A1-BUF-R(CAT-A1-PTR).
+      * ADVANCE SHARED POINTER (same index for both channels)
+           ADD 1 TO CAT-A1-PTR.
+           IF CAT-A1-PTR > 350 MOVE 1 TO CAT-A1-PTR.
+
+       6155-CAT-ALLPASS-2.
+      * CATHEDRAL - ALLPASS DIFFUSER 2 (~2.7ms / 120 samples)
+      * Second allpass stage further smooths the echo density.
+      * Uses CAT-AP-G2 (0.48) slightly detuned from stage 1
+      * to reduce metallic resonance at the allpass frequency.
+      *
+      * LEFT CHANNEL
+           COMPUTE CAT-AP-V-L =
+               WET-L + (CAT-AP-G2 * R-A2-BUF(CAT-A2-PTR)).
+           COMPUTE WET-L =
+               R-A2-BUF(CAT-A2-PTR) - (CAT-AP-G2 * CAT-AP-V-L).
+           MOVE CAT-AP-V-L TO R-A2-BUF(CAT-A2-PTR).
+      * RIGHT CHANNEL
+           COMPUTE CAT-AP-V-R =
+               WET-R + (CAT-AP-G2 * CAT-A2-BUF-R(CAT-A2-PTR)).
+           COMPUTE WET-R =
+               CAT-A2-BUF-R(CAT-A2-PTR) - (CAT-AP-G2 * CAT-AP-V-R).
+           MOVE CAT-AP-V-R TO CAT-A2-BUF-R(CAT-A2-PTR).
+      * ADVANCE SHARED POINTER
+           ADD 1 TO CAT-A2-PTR.
+           IF CAT-A2-PTR > 120 MOVE 1 TO CAT-A2-PTR.
+
+       6160-CAT-MIX-OUTPUT.
+      * CATHEDRAL - FINAL MIX
+      * WET-L/R is the sum of 4 comb tanks post-allpass.
+      * CAT-WET-SCALE (0.45) normalises the 4-tank sum and is set
+      * higher than the room equivalent (0.25) because the longer
+      * tanks build energy more slowly; the extra gain compensates.
+      * FX-REV-MIX then blends the normalised wet against dry.
+           COMPUTE SAMPLE-L =
+               (DRY-L * (1 - FX-REV-MIX)) +
+               (WET-L * CAT-WET-SCALE * FX-REV-MIX).
+           COMPUTE SAMPLE-R =
+               (DRY-R * (1 - FX-REV-MIX)) +
+               (WET-R * CAT-WET-SCALE * FX-REV-MIX).
 
        7000-DC-BLOCKER-STEREO.
       * (kept as-is - already short and clear)
@@ -719,6 +1040,31 @@
            END-PERFORM.
            PERFORM VARYING TEMP-IDX FROM 1 BY 1 UNTIL TEMP-IDX > 120
                MOVE 0 TO R-A2-BUF(TEMP-IDX)
+           END-PERFORM.
+      *------------------------------------------------------------*
+      * CATHEDRAL REVERB BUFFER ZEROING                            *
+      *------------------------------------------------------------*
+           PERFORM VARYING TEMP-IDX FROM 1 BY 1 UNTIL TEMP-IDX > 2205
+               MOVE 0 TO CAT-C1-BUF-L(TEMP-IDX)
+               MOVE 0 TO CAT-C1-BUF-R(TEMP-IDX)
+           END-PERFORM.
+           PERFORM VARYING TEMP-IDX FROM 1 BY 1 UNTIL TEMP-IDX > 2690
+               MOVE 0 TO CAT-C2-BUF-L(TEMP-IDX)
+               MOVE 0 TO CAT-C2-BUF-R(TEMP-IDX)
+           END-PERFORM.
+           PERFORM VARYING TEMP-IDX FROM 1 BY 1 UNTIL TEMP-IDX > 3175
+               MOVE 0 TO CAT-C3-BUF-L(TEMP-IDX)
+               MOVE 0 TO CAT-C3-BUF-R(TEMP-IDX)
+           END-PERFORM.
+           PERFORM VARYING TEMP-IDX FROM 1 BY 1 UNTIL TEMP-IDX > 3808
+               MOVE 0 TO CAT-C4-BUF-L(TEMP-IDX)
+               MOVE 0 TO CAT-C4-BUF-R(TEMP-IDX)
+           END-PERFORM.
+           PERFORM VARYING TEMP-IDX FROM 1 BY 1 UNTIL TEMP-IDX > 350
+               MOVE 0 TO CAT-A1-BUF-R(TEMP-IDX)
+           END-PERFORM.
+           PERFORM VARYING TEMP-IDX FROM 1 BY 1 UNTIL TEMP-IDX > 120
+               MOVE 0 TO CAT-A2-BUF-R(TEMP-IDX)
            END-PERFORM.
 
        8150-GENERATE-SINE-TABLES.
@@ -922,4 +1268,3 @@
            MOVE FX-SINE-RAW(LFO-NEXT-IDX) TO LFO-VAL-B.
            COMPUTE LFO-SMOOTH =
                LFO-VAL-A + (LFO-FRAC * (LFO-VAL-B - LFO-VAL-A)).
-
