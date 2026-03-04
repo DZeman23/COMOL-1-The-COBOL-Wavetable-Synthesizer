@@ -106,8 +106,23 @@ class App:
             'FX-DELAY-MS': "Delay Time in ms (10 - 3000)",
             'FX-DELAY-FBACK': "Delay Feedback (0.0 - 0.95)",
             'FX-DELAY-MIX': "Delay Wet/Dry Mix (0.0 - 1.0)",
-            'FX-REV-DECAY': "Reverb Decay (0.70 - 0.999)",
-            'FX-REV-MIX': "Reverb Wet/Dry Mix (0.0 - 1.0)",
+            # --- Reverb: shared ---
+            'FX-REV-MODE': "Reverb Mode: 1 = Room, 2 = Cathedral (integer)",
+            'FX-REV-MIX': "Reverb Wet/Dry Mix - shared by both modes (0.0 - 1.0)",
+            # --- Reverb: Room mode (mode 1) ---
+            'FX-REV-DECAY': "Room Reverb Decay - mode 1 only (0.70 - 0.990)",
+            'ROOM-INPUT-G': "Room Comb Input Gain (0.1 - 0.7)",
+            'ROOM-CROSS-G': "Room L/R Cross-Feed Gain (0.0 - 0.5)",
+            'ROOM-WET-SCALE': "Room Wet Normalisation: 0.25 = 1/4 tank sum (0.1 - 0.5)",
+            # --- Reverb: Cathedral mode (mode 2) ---
+            'CAT-REV-DECAY': "Cathedral Reverb Decay - mode 2 only (0.980 - 0.9995)",
+            'CAT-INPUT-G': "Cathedral Comb Input Gain (0.1 - 0.7)",
+            'CAT-CROSS-G': "Cathedral L/R Cross-Feed - widens stereo (0.1 - 0.6)",
+            'CAT-WET-SCALE': "Cathedral Wet Scale: higher than room (0.2 - 0.8)",
+            # --- Reverb: Allpass diffusion (shared between modes) ---
+            'CAT-AP-G': "Allpass Diffuser Stage 1 Gain (0.4 - 0.6)",
+            'CAT-AP-G2': "Allpass Diffuser Stage 2 Gain, detuned vs stage 1 (0.4 - 0.6)",
+            # --- File paths ---
             'IN_FILE_PATH': "Path to input mono .raw file (16-bit signed PCM)",
             'OUT_L_FILE_PATH': "Path to output LEFT channel .raw file",
             'OUT_R_FILE_PATH': "Path to output RIGHT channel .raw file"
@@ -453,8 +468,11 @@ class App:
 
             new_lines = original_lines[:]
 
-            # === FX-specific robust replacement (kept from your original) ===
-            for var in [v for v in self.variables if v.startswith('FX-')]:
+            # === FX-specific robust replacement ===
+            # Replaces VALUE fields for all non-path parameters,
+            # including new ROOM-* and CAT-* reverb params.
+            PATH_VARS = {'IN_FILE_PATH', 'OUT_L_FILE_PATH', 'OUT_R_FILE_PATH'}
+            for var in [v for v in self.variables if v not in PATH_VARS]:
                 new_val = values.get(var)
                 if new_val:
                     for i, line in enumerate(new_lines):
