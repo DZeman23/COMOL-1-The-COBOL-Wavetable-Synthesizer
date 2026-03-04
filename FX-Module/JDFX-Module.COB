@@ -1091,7 +1091,6 @@
        8500-INIT-SINC-TABLE.
       * (unchanged - generation loop is already well-commented)
            DISPLAY "Generating Sinc Table (Fast Lookup Method)...".
-
       * Outer Loop: Iterate through all 9000 sub-sample phases
            PERFORM VARYING CHORUS-PHASE-IDX FROM 1 BY 1
                UNTIL CHORUS-PHASE-IDX > PHASE-RESOLUTION
@@ -1106,8 +1105,8 @@
 
                    COMPUTE SINC-X = KERNEL-INDEX - MATCH-FRACTION
 
-      * Handle the center point (0/0 singularity)
-                   IF SINC-X = 0
+      * Handle the center point (0/0 singularity) and lookup table resolution limits
+                   IF SINC-X > -0.005 AND SINC-X < 0.005
                        COMPUTE FINAL-WEIGHT = 1.0
                    ELSE
       * ---------------------------------------------
@@ -1116,7 +1115,7 @@
       * Map (pi*x) to our 16384-point sine table
       * 16384 points = 2*PI. Therefore PI = 8192 steps.
       * ---------------------------------------------
-                       COMPUTE LOOKUP-INDEX = SINC-X * 8192
+                       COMPUTE LOOKUP-INDEX ROUNDED = SINC-X * 8192
 
       * Handle Wrap-Around (Modulo 16384)
                        COMPUTE LOOKUP-INDEX =
@@ -1129,7 +1128,7 @@
 
       * Fetch Sine from existing FX table
                        ADD 1 TO LOOKUP-INDEX
-                      MOVE FX-SINE-RAW(LOOKUP-INDEX) TO FINAL-SINE-VALUE
+              MOVE FX-SINE-RAW(LOOKUP-INDEX) TO FINAL-SINE-VALUE
 
       * Calculate Sinc: sin(pi*x) / (pi*x)
                        COMPUTE SINC-WEIGHT =
@@ -1140,7 +1139,7 @@
       * 0.5 + 0.5 * cos(pi * x / radius)
       * Using Sine table shifted by 90 deg (4096 steps)
       * ---------------------------------------------
-                       COMPUTE LOOKUP-INDEX =
+                       COMPUTE LOOKUP-INDEX ROUNDED =
                            (SINC-X * 8192) / KERNEL-RADIUS
 
       * Shift for Cosine (add quarter rotation)
@@ -1154,7 +1153,7 @@
                        END-IF
                        ADD 1 TO LOOKUP-INDEX
 
-                       MOVE FX-SINE-RAW(LOOKUP-INDEX) TO FINAL-COS-VALUE
+              MOVE FX-SINE-RAW(LOOKUP-INDEX) TO FINAL-COS-VALUE
 
                        COMPUTE WINDOW-WEIGHT =
                            0.5 + (0.5 * FINAL-COS-VALUE)
@@ -1268,3 +1267,4 @@
            MOVE FX-SINE-RAW(LFO-NEXT-IDX) TO LFO-VAL-B.
            COMPUTE LFO-SMOOTH =
                LFO-VAL-A + (LFO-FRAC * (LFO-VAL-B - LFO-VAL-A)).
+
